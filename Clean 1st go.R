@@ -8,50 +8,23 @@ load("~/GitHub/Data-Science-Final-Project/04572-0003-Data.rda")
 federal <- da04572.0003
 states <- da04572.0004
 
-total <- rbind(federal,states)
+mydata <- rbind(federal,states)
 
-unique(total$CH_CRIMHIST)
-unique(total$CH_CRIMHIST_COLLAPSED)
-unique(total$CH_CRIM_HISTORY)
+summary(mydata)
+unique(mydata$CH_CRIMHIST)
+unique(mydata$CH_CRIMHIST_COLLAPSED)
+unique(mydata$CH_CRIM_HISTORY)
 
-summary(total$CH_CRIMHIST_COLLAPSED)
+summary(mydata$CH_CRIM_HISTORY) #Variable for recidivism
 
-#New Criminal History Variable with recidivist = 1, and first timers = 0, Factor variable
-#drop observations for missing values in criminal history
-
-mydata <- subset.data.frame(x = total, subset = CH_CRIMHIST_COLLAPSED != "(9999999) Missing")
-summary(mydata$CH_CRIMHIST_COLLAPSED)
-droplevels((mydata)$CH_CRIMHIST_COLLAPSED)
-
-levels(mydata$CH_CRIMHIST_COLLAPSED)[levels(mydata$CH_CRIMHIST_COLLAPSED) == "(0000001) First timers"] <- 0
-levels(mydata$CH_CRIMHIST_COLLAPSED)[levels(mydata$CH_CRIMHIST_COLLAPSED) == "(0000002) Recidivist, current or past violent offense"] <- 1
-levels(mydata$CH_CRIMHIST_COLLAPSED)[levels(mydata$CH_CRIMHIST_COLLAPSED) == "(0000003) Recidivist, no current or prior violent offense"] <- 1
-
-mydata$CH_CRIMHIST_COLLAPSED <- as.factor(mydata$CH_CRIMHIST_COLLAPSED)
-levels(mydata$CH_CRIMHIST_COLLAPSED)
-
-#Veteran: 1 if yes, 0 if no, factor variable
-levels(mydata$VETERAN)[levels(mydata$VETERAN) == "(1) Yes"] <- 1
-levels(mydata$VETERAN)[levels(mydata$VETERAN) == "(2) No"] <- 0
-mydata$VETERAN <- as.numeric(mydata$VETERAN)
-mydata$VETERAN[mydata$VETERAN <- 2] <- 0
-
-#Race: White = 1, Black = 2, Hispanic = 3, Others = 4 (Others include (American indian, alaska native non-hispanic)
-# (Asian, pacific islander, native hawaiian non-hispanic), (Multiple races reported, non-hispanic), (Missing))
-
-
-levels(mydata$RACE)[levels(mydata$RACE) == "(0000001) White non-hispanic"] <- 1
-levels(mydata$RACE)[levels(mydata$RACE) == "(0000002) Black non-hispanic"] <- 2
-levels(mydata$RACE)[levels(mydata$RACE) == "(0000003) Hispanic"] <- 3
-levels(mydata$RACE)[levels(mydata$RACE) == "(0000004) American indian, alaska native non-hispanic"] <- 4
-levels(mydata$RACE)[levels(mydata$RACE) == "(0000005) Asian, pacific islander, native hawaiian non-hispanic"] <- 4
-levels(mydata$RACE)[levels(mydata$RACE) == "(0000006) Multiple races reported, non-hispanic"] <- 4
-levels(mydata$RACE)[levels(mydata$RACE) == "(9999999) Missing"] <- 4
-
-
+#Data Structure
+str(mydata, list.len=ncol(mydata))
 #Most variables are factor variables with well defined labels
 
-#Non-Factor Variables 
+################################
+######### NUMERIC VARIABLES #################
+
+#I look at Non-Factor Variables first to correct for any missingness
 summary(mydata$CS_SENTENCEMTH) #SENTENCE LENGTH IN MONTHS
 summary(mydata$CH_EXPECTEDTIMEMTH) #TIME TO BE SERVED TO EXPECTED DATE OF RELEASE IN MONTHS
 summary(mydata$CH_SERVEDMTH) #TIME SERVED TO DATE OF INTERVIEW IN MONTHS
@@ -103,13 +76,91 @@ mydata$IC_MANYVICT_NUMOFVICT[mydata$IC_MANYVICT_NUMOFVICT > 1000] <- NA
 unique(mydata$CH_PRIORARREST_CAT)
 mydata$CH_PRIORARREST_CAT[mydata$CH_PRIORARREST_CAT > 1000] <- NA
 
+##########################################
 
+##########################################
+################ FACTOR VARIABLES ##########################
+
+#Race: White = 1, Black = 2, Hispanic = 3, Others = 4 (Others include (American indian, alaska native non-hispanic)
+# (Asian, pacific islander, native hawaiian non-hispanic), (Multiple races reported, non-hispanic), (Missing))
+
+levels(mydata$RACE)[levels(mydata$RACE) == "(0000001) White non-hispanic"] <- 1
+levels(mydata$RACE)[levels(mydata$RACE) == "(0000002) Black non-hispanic"] <- 2
+levels(mydata$RACE)[levels(mydata$RACE) == "(0000003) Hispanic"] <- 3
+levels(mydata$RACE)[levels(mydata$RACE) == "(0000004) American indian, alaska native non-hispanic"] <- 4
+levels(mydata$RACE)[levels(mydata$RACE) == "(0000005) Asian, pacific islander, native hawaiian non-hispanic"] <- 4
+levels(mydata$RACE)[levels(mydata$RACE) == "(0000006) Multiple races reported, non-hispanic"] <- 4
+levels(mydata$RACE)[levels(mydata$RACE) == "(9999999) Missing"] <- 4
+mydata$RACE <- as.numeric(mydata$RACE) 
+summary(mydata$RACE)
+
+
+#Clean Function for Yes/No/Missing in Factor Variables
+clean1 <- function(variable){
+  as.numeric(levels(variable)[levels(variable) == "(1) Yes"] <- 1)
+  as.numeric(levels(variable)[levels(variable) == "(2) No"] <- 0)
+  as.numeric(levels(variable)[levels(variable) == "(0000001) Has children"] <- 1)
+  as.numeric(levels(variable)[levels(variable) == "(0000002) Does not have children"] <- 0)
+  as.numeric(levels(variable)[levels(variable) == "(0000000) No"] <- 0)
+  as.numeric(levels(variable)[levels(variable) == "(0000002) No"] <- 0)
+  as.numeric(levels(variable)[levels(variable) == "(0000001) Yes"] <- 1)
+  as.numeric(levels(variable)[levels(variable) == "(9999998) DK/Refused/Missing"] <- NA)
+  as.numeric(levels(variable)[levels(variable) == "(9999997) Don't know"] <- NA)
+  as.numeric(levels(variable)[levels(variable) == "(9999998) Refused"] <- NA)
+  as.numeric(levels(variable)[levels(variable) == "(9999999) Missing"] <- NA)
+  as.numeric(levels(variable)[levels(variable) == "(7) Unknown"] <- NA)
+  return(as.numeric(variable))
+}
+
+#Veterans
+clean1(mydata$VETERAN)
+str(mydata$VETERAN)
+
+#Keep Age in factors [Should we convert missing to NAs? Right now it appears as a factor]
+#Age Category 1
+summary(mydata$AGE_CAT)
+#Age Category2
+summary(mydata$CAT_AGE2)
+#Age Categor3
+summary(mydata$CAT_AGE3)
+
+#Converting Yes-No Factor Variables to dummy variables, leaving multiple category variables as factor variables
+summary(mydata$OFFENSE_VIOLENT)
+clean1(mydata$OFFENSE_PROPERTY)
+clean1(mydata$OFFENSE_DRUG)
+clean1(mydata$SES_PHYSABUSED_EVER)
+clean1(mydata$SES_SEXABUSED_EVER)
+clean1(mydata$SES_HASCHILDREN)
+clean1(mydata$SES_PARENTS_INCARCERATED)
+
+#Not Working!!!
+
+
+summary(mydata$SES_PHYSSEXABUSED_EVER) #Multiple Categories
+summary(mydata$SES_AGEOFF_PHYSSEXABUSED) #Multiple Categories
+summary(mydata$SES_AGEPERP_PHYSSEXABUSED) #Multiple Categories
+summary(mydata$SES_OFF_RAPED) #Multiple Categories
+
+
+
+
+
+
+
+
+
+
+
+
+
+##########################################
 #Converting Factor Variables to Numeric
 mydata <- sapply(mydata, as.numeric)
 
-##########################################
+cortable <- cor(mydata, method = c("pearson", "kendall", "spearman"))
 
-cortable <- as.matrix(cor(mydata, method = c("pearson", "kendall", "spearman")))
+head(cortable, list.len = ncol(cortable))
+cor(x = mydata$CH_CRIM_HISTORY, mydata$RACE)
 
 #Variables with highest correlation with recidivism
 $CH_PRIORSENTENCE #not useful
