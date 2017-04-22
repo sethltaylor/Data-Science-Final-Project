@@ -19,7 +19,7 @@ download.file(url, temp) ##download the URL direct to the temp file
 temp <- unzip(temp, exdir=getwd()) ##unzip that file
 state.num <- read.csv(temp, header = TRUE)
 
-# @ Seth: create state/fed identifyer dummy first, so that we can model fedearl/state differences
+## @ Seth: create state/fed identifyer dummy first, so that we can model fedearl/state differences
 
 # dummy for State
 state.num$state <- TRUE
@@ -27,14 +27,30 @@ fed.num$state <- FALSE
 
 fulldata.num <- rbind(fed.num,state.num)
 
-load("C:/Users/Seth/Documents/GitHub/Predicting-Recidivism/Data/FedAnalysisR.Rdata")
-load("C:/Users/Seth/Documents/GitHub/Predicting-Recidivism/Data/StateAnalysisR.Rdata")
+## using Jeff's code for State Analysis and Federal Analysis Data as well
 
-fedan <- da04572.0003
-statean <- da04572.0004
+# Federal Analysis Data
+url <- "https://github.com/GeorgetownMcCourt/Predicting-Recidivism/raw/master/Data/FedAnalysis.csv" #url + file name goes here
+temp = tempfile() #Create temp file
+download.file(url, temp) ##download the URL direct to the temp file
+fed.an <- read.csv(temp, header = TRUE)
 
-analysisdata <- rbind(fedan,statean)
+# State Analysis Data
+url <- "https://github.com/GeorgetownMcCourt/Predicting-Recidivism/raw/master/Data/StateAnalysis.csv" #url + file name goes here
+temp = tempfile() #Create temp file
+download.file(url, temp) ##download the URL direct to the temp file
+state.an <- read.csv(temp, header = TRUE)
 
+## @ Seth: create state/fed identifyer dummy first, so that we can model fedearl/state differences
+
+# dummy for State
+state.an$state <- TRUE
+fed.an$state <- FALSE
+
+fulldata.an <- rbind(fed.an,state.an)
+
+## cbind analysis and numeric data (useful?)
+fulldata <- cbind(fulldata.an, fulldata.num)
 
 #### Cleaning Function ####
 
@@ -50,28 +66,59 @@ clean1 <- function(variable){
   levels(variable)[levels(variable) == "(9999997) Don't know"] <- NA
   levels(variable)[levels(variable) == "(9999998) Refused"] <- NA
   levels(variable)[levels(variable) == "(9999999) Missing"] <- NA
+  levels(variable)[levels(variable) == "9999999"] <- NA
   levels(variable)[levels(variable) == "(7) Unknown"] <- NA
    return(as.factor(variable))
 }
 
 
-#Generate recidivism variable#
-clean1(analysisdata$CH_CRIMHIST_COLLAPSED)
-analysisdata$recidivism[analysisdata$CH_CRIMHIST_COLLAPSED == "(0000001) First timers"] <- 0
-analysisdata$recidivism[analysisdata$CH_CRIMHIST_COLLAPSED == "(0000002) Recidivist, current or past violent offense"] <- 1
-analysisdata$recidivism[analysisdata$CH_CRIMHIST_COLLAPSED == "(0000003) Recidivist, no current or prior violent offense"] <- 1
-analysisdata$recidivism <- as.factor(analysisdata$recidivism)
+#Generate recidivism variable
+
+# NB: test whether you actually changed variable: table variable prior and post changes
+table(fulldata.an$CH_CRIMHIST_COLLAPSED)
+
+
+fulldata.an$CH_CRIMHIST_COLLAPSED <- clean1(fulldata.an$CH_CRIMHIST_COLLAPSED) 
+    # NB: need to reassign object, otherwise nothing is change in the data!
+
+# table post changes
+table(fulldata.an$CH_CRIMHIST_COLLAPSED)
+table(is.na(fulldata.an$CH_CRIMHIST_COLLAPSED)) # 88 values previously labeled "9999999" successfully converted into NA
+
+
+# analysisdata$recidivism[analysisdata$CH_CRIMHIST_COLLAPSED == "(0000001) First timers"] <- 0
+# analysisdata$recidivism[analysisdata$CH_CRIMHIST_COLLAPSED == "(0000002) Recidivist, current or past violent offense"] <- 1
+# analysisdata$recidivism[analysisdata$CH_CRIMHIST_COLLAPSED == "(0000003) Recidivist, no current or prior violent offense"] <- 1
+# analysisdata$recidivism <- as.factor(analysisdata$recidivism)
+
+# I don't think we need our variables to be factors but we should store them as numeric (for later calculations)
+# pettier code than the above: ifelse
+
+fulldata.an$recidivism <- ifelse(fulldata.an$CH_CRIMHIST_COLLAPSED == "1", fulldata.an$recidivism <- 0,
+                              ifelse(fulldata.an$CH_CRIMHIST_COLLAPSED == "2", fulldata.an$recidivism <- 1,
+                                  ifelse(fulldata.an$CH_CRIMHIST_COLLAPSED == "3", fulldata.an$recidivism <- 1, 
+                                         is.na(fulldata.an$recidivism) == T )))
 
 #Clean certain variables#    ###There is probably a better way to do this as a loop, but I couldn't get it to work correctly
-analysisdata$VETERAN <- clean1(analysisdata$VETERAN)
-analysisdata$AGE_CAT <- clean1(analysisdata$AGE_CAT)
-analysisdata$RACE <- clean1(analysisdata$RACE)
-analysisdata$OFFENSE_VIOLENT <- clean1(analysisdata$OFFENSE_VIOLENT)
-analysisdata$OFFENSE_DRUG <- clean1(analysisdata$OFFENSE_DRUG)
-analysisdata$OFFENSE_PROPERTY <- clean1(analysisdata$OFFENSE_PROPERTY)
-analysisdata$OFFENSE_PUBLICORDER <- clean1(analysisdata$OFFENSE_PUBLICORDER)
-analysisdata$SES_PHYSABUSED_EVER <- clean1(analysisdata$SES_PHYSABUSED_EVER)
-analysisdata$SES_SEXABUSED_EVER <- clean1(analysisdata$SES_SEXABUSED_EVER)
+
+# analysisdata$VETERAN <- clean1(analysisdata$VETERAN)
+# analysisdata$AGE_CAT <- clean1(analysisdata$AGE_CAT)
+# analysisdata$RACE <- clean1(analysisdata$RACE)
+# analysisdata$OFFENSE_VIOLENT <- clean1(analysisdata$OFFENSE_VIOLENT)
+# analysisdata$OFFENSE_DRUG <- clean1(analysisdata$OFFENSE_DRUG)
+# analysisdata$OFFENSE_PROPERTY <- clean1(analysisdata$OFFENSE_PROPERTY)
+# analysisdata$OFFENSE_PUBLICORDER <- clean1(analysisdata$OFFENSE_PUBLICORDER)
+# analysisdata$SES_PHYSABUSED_EVER <- clean1(analysisdata$SES_PHYSABUSED_EVER)
+# analysisdata$SES_SEXABUSED_EVER <- clean1(analysisdata$SES_SEXABUSED_EVER)
+
+## here you go for the loop version
+
+clean.columns <- c("VETERAN", "AGE_CAT", "RACE", "OFFENSE_VIOLENT", "OFFENSE_DRUG", "OFFENSE_PROPERTY", "OFFENSE_PUBLICORDER",
+                   "SES_PHYSABUSED_EVER", "SES_SEXABUSED_EVER")
+
+for (i in 1:length(clean.columns)){
+  fulldata.an[,i] <- clean1(fulldata.an[,i])
+}
 
 ## Mean F1 ##
 meanf1 <- function(actual, predicted){
