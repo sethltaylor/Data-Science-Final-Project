@@ -1,5 +1,8 @@
 
 setwd("C:/Users/viola/Documents/Studium/MPP GU/Spring 2017/Data Science/Data-Science-Final-Project") # adjust individually
+setwd("/Users/shashankrai/GitHub/Data-Science-Final-Project")
+      
+      
 
 library(memisc)
 
@@ -14,6 +17,22 @@ loadRData <- function(fileName){
   get(ls()[ls() != "fileName"])
 }
 
+#Download option 1
+###
+library(RCurl)
+temp <- tempfile()
+download.file("https://github.com/GeorgetownMcCourt/Predicting-Recidivism/raw/master/Data/FederalAnalysisR.rda", temp, method = "auto", mode="wb")
+fed.an <- load(temp)
+fed.an <- da04572.0003
+
+temp <- tempfile()
+download.file("https://github.com/GeorgetownMcCourt/Predicting-Recidivism/raw/master/Data/StateAnalysisR.rda", temp, method = "auto", mode="wb")
+state.an <- load(temp)
+state.an <- da04572.0004
+###
+
+#Download option 2
+###
 # Federal Analysis Data
 url <- "https://github.com/GeorgetownMcCourt/Predicting-Recidivism/raw/master/Data/FederalAnalysisR.rda"
 temp = tempfile() #Create temp file
@@ -26,6 +45,7 @@ url <- "https://github.com/GeorgetownMcCourt/Predicting-Recidivism/raw/master/Da
 temp = tempfile() #Create temp file
 download.file(url, temp) ##download the URL direct to the temp file
 state.an <- loadRData(temp)
+###
 
 # dummy for State T/F before combining fed.an and state.an
 state.an$state <- TRUE
@@ -245,19 +265,29 @@ theoretical.regr <- glm(CH_CRIMHIST_COLLAPSED ~ OFFENSE_VIOLENT + OFFENSE_DRUG +
 
 summary(theoretical.regr)
 
-# suprises: 1) negative significant effect of length of sentence
-#           2) large significant negative effect of hispanic
-#           3) having children = higher risk of recidivism
-#           4) large negative effect of history of sexual abuse
+# suprises: 1) negative significant effect of length of sentence #Shashank - Chances are that prisoners with longer sentences will be released less often in their lifetime and hence less recidivism
+#           2) large significant negative effect of hispanic #
+#           3) having children = higher risk of recidivism #Shashank - See if unemployment's interaction with children is significant. 
+                                                          #Hypothesis being that those that are unemployed and with children to feed may use crime as a tool to get by, 
+                                                          #but mainly small crimes. After a certain number of offences, they may get a small term. But unable to do any better,
+                                                          # once outside the prison, they may continue to engage in illegal activities. 
+                                                          #This combined with justice system's tendency to award stricter punishment with increasing number of offences
+                                                          #might be one of the causes behind recidivism
+#           4) large negative effect of history of sexual abuse 
 #           5) Drug offenders less likely (significant negative effect)
+#Shashank - Wondering if sexual abuse and drug offences might be positively correlated. Would then be worth figuring out what's going on there. 
+
+#6) Shashank - Also there is small significance for different grades in school, which is not surprising, but large significance for "Graduate school two or more years"
 
 # NO surprise: 1) positive significant effect of black.nh
 #             2) lower inc = positive effect, highest inc = negative effect
 #             3) equivalent for education
 #             4) family incarcerated = positive effect
-#             5) the older the more risk of recidivism
+#             5) the older the more risk of recidivism #Shashank - Not really. It seems significant for all age groups. Significance reduces at 55-64. 
+                                                      # And then is insignificant for older ages, which makes sense - average age might be lower. 
+                                                      # Also ability to commit crime might go down with age. 
 #             6) violent offenders higher risk
-#             7) regular use of Cocaine/Crack increases risk of recidivism
+#             7) regular use of Cocaine/Crack increases risk of recidivism #Shashank - But drug offences don't? Worth exploring this. 
 
 
 
