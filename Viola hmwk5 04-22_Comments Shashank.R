@@ -538,4 +538,21 @@ summary(theoretical.regr14)
 
 #Not signifincant  with or without treatment. 
 
+# DRUG_ANYINF_CB - UNDER INFLUENCE OF ANY DRUGS AT TIME OF CURRENT OFFENSE
+
+full.numeric$DRUG_ANYINF_CB <- clean1(full.numeric$DRUG_ANYINF_CB)
+full.numeric$DRUG_ANYINF_CB[full.numeric$DRUG_ANYINF_CB==2] <- 0
+
+theoretical.regr15 <- glm(CH_CRIMHIST_COLLAPSED ~ OFFENSE_VIOLENT + OFFENSE_DRUG + SES_PHYSABUSED_EVER + CS_SENTENCEMTH + 
+                            + SES_PARENTS_INCARCERATED + SES_FAMILY_INCARCERATED + SES_HASCHILDREN + DRUG_ANYINF_CB
+                          + DRUG_FIRED_ALCDRUG + DRUG_TRTPRB
+                          +  EDUCATION + AGE_CAT + SES_INCOMEMTH + 
+                            black.nh + hispanic + asian + SES_SEXABUSED_EVER, 
+                          data = full.numeric,
+                          na.action = na.exclude)
+
+summary(theoretical.regr15)
+
+#Not significant
+
 
