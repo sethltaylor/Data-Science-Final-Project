@@ -213,6 +213,32 @@ for (i in vars) {
   full.numeric[,i] <- as.numeric(as.character(full.numeric[,i]))
 }
 
+## Removing Missing + non-US education categories from Education 
+levels(full.numeric$EDUCATION) <- gsub("[[:punct:]]", "", levels(full.numeric$EDUCATION))
+levels(full.numeric$EDUCATION) <- gsub("[[:space:]]", "", levels(full.numeric$EDUCATION))
+levels(full.numeric$EDUCATION) <- gsub("[[:alpha:]]", "", levels(full.numeric$EDUCATION))
+
+full.numeric$EDUCATION <- as.character(full.numeric$EDUCATION)
+
+full.numeric$EDUCATION <- recode(full.numeric$EDUCATION,
+                                 NA <- c("0000019","9999997","9999998","9999999"),
+                                 otherwise = "copy")
+
+full.numeric$EDUCATION <- as.factor(full.numeric$EDUCATION)
+
+## Removing Missing Values from SES_INCOMEMTH
+full.numeric$SES_INCOMEMTH <- as.character(full.numeric$SES_INCOMEMTH)
+
+full.numeric$SES_INCOMEMTH <- recode(full.numeric$SES_INCOMEMTH,
+                                 NA <- c("(9999997) Don't know","(9999998) Refused","(9999999) Missing"),
+                                 otherwise = "copy")
+
+full.numeric$SES_INCOMEMTH <- as.factor(full.numeric$SES_INCOMEMTH)
+
+# Remove Unknown Category from AGE_CAT
+full.numeric$AGE_CAT <- factor(full.numeric$AGE_CAT)
+
+
 
 #### 3) First Logistic Regressions (NO Predictions yet) ####
 
