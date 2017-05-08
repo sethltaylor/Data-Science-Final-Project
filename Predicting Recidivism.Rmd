@@ -1,0 +1,464 @@
+---
+title: "Predicting Recidivism in the U.S. Prison Population"
+author: "Seth Taylor, Viola Hilbert, Shashank Shekhr Rai"
+date: "May 8, 2017"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introduction
+
+Risk assessment has a long history in the United States judicial system, with the first attempts at structured, qualitative risk assessment being employed as early as 1923. The history of quantitative risk assessment is much shorter. The first quantitative risk assessment tool was constructed in 1991, based upon multivariate regression. This tool has been superseded in the federal system by the Post-Conviction Risk Assessment (PCRA), which uses a combination of factors fom criminal history, education/employment, substance abuse, social networks, and cognitions in a multivariate analsyis to generate a risk measurement of low, low/moderate, moderate, or high risk. The AUC for the PCRA has been shown to range between .709 and .783. 
+
+
+This project analyzes correlations between recidivism and risk factors such as socio-economic characteristics, mental health, family background, drug use, and prior offenses to predict the probability of recidivism. We compare several classification methods against each other, including binomial GLM, K-nearest neighbors, decision trees, and random forests to determine the best predictive method. We also ues the results from our GLM model to examine what factors are most importan in predicting recidivism, and to draw policy conclusions as to how the risk of recidivism might be lowered. 
+
+# Data
+
+The data used in this project is retrieved from the 2004 Survey of Inmates in State Correctional Facilities (SISCF) and the 2004 Survey of Inmates in Federal Correctional Facilities (SIFCF). These surveys, collectively referred to as the 2004 Survey of Inmates in State and Federal Correctional Facilities (SISFCF), provide nationally representative data on inmates held in state prisons and federal prisons for the year 2004. Collected through personal interviews conducted from October 2003 through May 2004, the data captures information about prisoners' current offense and sentence, criminal history, family background, socio-economic characteristics, prior drug and alcohol use and treatment programs, gun possession and use, as well as prison activities, programs, and services.
+
+
+We combine the data from the federal analysis and state analysis datasets for our analysis, which provides information on 14,499 prisoners in the state correctional system and 3686 prisoners in the federal correctional system. 
+
+```{r echo = FALSE, warning = FALSE}
+
+install.packages("memisc") 
+library(memisc)
+
+#### 1) DATA EXTRACTION ####
+
+## Extract .rda files for Federal and State Analysis data from Github #
+
+# This function assigns the loaded data frame the desired name directly
+
+loadRData <- function(fileName){
+  #loads an RData file, and returns it
+  load(fileName)
+  get(ls()[ls() != "fileName"])
+}
+
+# Federal Analysis Data
+url <- "https://github.com/GeorgetownMcCourt/Predicting-Recidivism/raw/master/Data/FederalAnalysisR.rda"
+temp = tempfile() #Create temp file
+download.file(url, temp) #download the URL direct to the temp file
+fed.an <- loadRData(temp)
+
+
+# State Analysis Data
+url <- "https://github.com/GeorgetownMcCourt/Predicting-Recidivism/raw/master/Data/StateAnalysisR.rda"
+temp = tempfile() #Create temp file
+download.file(url, temp) ##download the URL direct to the temp file
+state.an <- loadRData(temp)
+
+#Creates a dummy for State T/F before combining fed.an and state.an
+state.an$state <- TRUE
+fed.an$state <- FALSE
+
+full.an <- rbind(fed.an,state.an)
+
+# rename first column (id's) and change to character
+names(full.an)[1] <- "ID"
+full.an$ID <- as.character(full.an$ID)
+
+```
+
+Since this data is survey data, it requires further cleaning and recoding to ensure it is appropriate for analysis and to handle missigness. We use the package "memisc", which is deisgned to handle survey data. 
+
+```{r echo = FALSE, warning = FALSE}
+
+#### 2) DATA CLEANING ####
+
+# replicate dataset in order to check back with orignial dataset if all changes made are true to data
+full.numeric <- full.an
+
+### Generate recidivism variable - running this first to ensure no other recoding interferes with it
+
+full.numeric$CH_CRIMHIST_COLLAPSED <- full.an$CH_CRIMHIST_COLLAPSED # reassign original variable
+
+full.numeric$CH_CRIMHIST_COLLAPSED <- as.character(full.numeric$CH_CRIMHIST_COLLAPSED) #convert to character
+
+full.numeric$CH_CRIMHIST_COLLAPSED <- recode(full.numeric$CH_CRIMHIST_COLLAPSED, #recode
+                                             0 <- "(0000001) First timers",
+                                             1 <- c("(0000002) Recidivist, current or past violent offense", 
+                                                    "(0000003) Recidivist, no current or prior violent offense"),
+                                             otherwise = NA)
+full.numeric$CH_CRIMHIST_COLLAPSED <- as.numeric(as.character(full.numeric$CH_CRIMHIST_COLLAPSED))
+
+
+# create list with factor levels to get idea of categorical values
+levels.list <- vector("list", length = ncol(full.numeric))
+
+for (i in 2:ncol(full.numeric)) {
+  if (is.factor(full.numeric[,i]) == T) {
+    levels.list[[i]] <- levels(full.numeric[,i]) # extract factor levels
+  }
+}
+
+
+## Start with Factors with 3 Levels: Some Form of Yes, No, Missing
+
+# change factor labels for harmonization
+for (i in 2:ncol(full.numeric)) {
+  if (is.factor(full.numeric[,i]) == T & length(levels(full.numeric[,i])) == 3) {
+    
+    # remove punctuation, spaces, and alphabetic expressions
+    levels(full.numeric[,i]) <- gsub("[[:punct:]]", "", levels(full.numeric[,i]))
+    levels(full.numeric[,i]) <- gsub("[[:space:]]", "", levels(full.numeric[,i]))
+    levels(full.numeric[,i]) <- gsub("[[:alpha:]]", "", levels(full.numeric[,i]))
+    # now the factor label should be numeric only
+    
+  }
+}
+
+# convert into character vector and recode
+for (i in 2:ncol(full.numeric)) {
+  if (is.factor(full.numeric[,i]) == T & length(levels(full.numeric[,i])) == 3) {
+    
+    full.numeric[,i] <- as.character(full.numeric[,i])
+    
+    full.numeric[,i] <- recode(full.numeric[,i],
+                               1 <- "0000001",
+                               0 <- c("0000000", "0000002"),
+                               otherwise = NA)
+    
+    full.numeric[,i] <- as.numeric(as.character(full.numeric[,i]))
+    
+  }
+}
+
+
+## Factors with 4 Levels: Some Form of Yes, No, Missing
+for (i in 2:ncol(full.numeric)) {
+  if (is.factor(full.numeric[,i]) == T & length(levels(full.numeric[,i])) == 4) {
+    
+    # remove punctuation, spaces, and alphabetic expressions
+    levels(full.numeric[,i]) <- gsub("[[:punct:]]", "", levels(full.numeric[,i]))
+    levels(full.numeric[,i]) <- gsub("[[:space:]]", "", levels(full.numeric[,i]))
+    levels(full.numeric[,i]) <- gsub("[[:alpha:]]", "", levels(full.numeric[,i]))
+    # now the factor label should be numeric only
+    
+  }
+}
+
+# convert into character vector and recode
+for (i in 2:ncol(full.numeric)) {
+  if (is.factor(full.numeric[,i]) == T & length(levels(full.numeric[,i])) == 4) {
+    
+    full.numeric[,i] <- as.character(full.numeric[,i])
+    
+    full.numeric[,i] <- recode(full.numeric[,i],
+                               1 <- "0000001",
+                               0 <- c("0000002", "0000004"),
+                               otherwise = NA)
+    
+    full.numeric[,i] <- as.numeric(as.character(full.numeric[,i]))
+    
+  }
+}
+
+##Recoding Gender - this is the only two level variable that is not yes/no, so we run this first so it doesn't get overwritten by the 2 level recode
+full.numeric$GENDER <- as.character(full.numeric$GENDER)
+
+full.numeric$GENDER <- recode(full.numeric$GENDER,
+                              0 <- "(1) Male",
+                              1 <- c("(2) Female"),
+                              otherwise = "copy")
+
+full.numeric$GENDER <- as.numeric(full.numeric$GENDER)
+
+#Convert 1 = Yes 2 = No w/ no missing
+for (i in 2:ncol(full.numeric)) {
+  if (is.factor(full.numeric[,i]) == T & length(levels(full.numeric[,i])) == 2) {
+    
+    full.numeric[,i] <- as.character(full.numeric[,i])
+    
+    full.numeric[,i] <- recode(full.numeric[,i],
+                               1 <- "(1) Yes",
+                               0 <- c("(2) No"),
+                               otherwise = NA)
+    
+    full.numeric[,i] <- as.numeric(as.character(full.numeric[,i]))
+    
+  }
+}
+
+# Create Race Dummies
+
+full.numeric$hispanic <- NA
+full.numeric$hispanic <- ifelse(full.numeric$RACE == "(0000003) Hispanic", full.numeric$hispanic <- 1,
+                                ifelse(full.numeric$RACE == "(9999999) Missing", full.numeric$hispanic <- NA, 0))
+
+full.numeric$black.nh <- NA
+full.numeric$black.nh <- ifelse(full.numeric$RACE == "(0000002) Black non-hispanic", full.numeric$black.nh <- 1,
+                                ifelse(full.numeric$RACE == "(9999999) Missing", full.numeric$black.nh <- NA, 0))
+
+full.numeric$asian <- NA
+full.numeric$asian <- ifelse(full.numeric$RACE == "(0000005) Asian, pacific islander, native hawaiian non-hispanic", 
+                             full.numeric$asian <- 1,
+                             ifelse(full.numeric$RACE == "(9999999) Missing", full.numeric$asian <- NA, 0))
+
+
+## Recode CS_SENTENCEMTH (Length of Sentence in Month)
+
+full.numeric$CS_SENTENCEMTH[full.numeric$CS_SENTENCEMTH > 10000] <- NA ## convert all Missings
+
+full.numeric$CS_SENTENCEMTH <- as.numeric(full.numeric$CS_SENTENCEMTH) ## NB: Length of 10,000 == Life or Death Sentence
+
+full.numeric$LIFE_SENTENCE <- ifelse(full.numeric$CS_SENTENCEMTH == 10000, 1, 0) ## Creates variable for life sentence
+
+full.numeric$CS_SENTENCEMTH[full.numeric$CS_SENTENCEMTH == 10000] <- NA ## Converts life sentence in months to NA
+
+##Recode SES_PARENTS_INCARCERATED, SES_HASCHILDREN, SES_FAMILY_INCARCERATED, DRUG_TRT, SES_INCOMEILLEGALMTH, SES_INCOMEWELFAREMTH
+
+vars <- c("SES_PARENTS_INCARCERATED", "SES_HASCHILDREN", "SES_FAMILY_INCARCERATED", "DRUG_TRT", "SES_INCOMEILLEGALMTH", "SES_INCOMEWELFAREMTH")
+
+# Removes punctuation, spaces, and alphabetic expressions
+
+for (i in vars) {
+  levels(full.numeric[,i]) <- gsub("[[:punct:]]", "", levels(full.numeric[,i]))
+  levels(full.numeric[,i]) <- gsub("[[:space:]]", "", levels(full.numeric[,i]))
+  levels(full.numeric[,i]) <- gsub("[[:alpha:]]", "", levels(full.numeric[,i]))
+  # now the factor label should be numeric only
+}
+
+# Converts into a character vector and recodes
+
+for (i in vars) {
+  full.numeric[,i] <- as.character(full.numeric[,i])
+  
+  full.numeric[,i] <- recode(full.numeric[,i],
+                             1 <- "0000001",
+                             0 <- c("0000002"),
+                             otherwise = NA)
+  full.numeric[,i] <- as.numeric(as.character(full.numeric[,i]))
+}
+
+
+## Removing Missing + non-US education categories from Education 
+levels(full.numeric$EDUCATION) <- gsub("[[:punct:]]", "", levels(full.numeric$EDUCATION))
+levels(full.numeric$EDUCATION) <- gsub("[[:space:]]", "", levels(full.numeric$EDUCATION))
+levels(full.numeric$EDUCATION) <- gsub("[[:alpha:]]", "", levels(full.numeric$EDUCATION))
+
+full.numeric$EDUCATION <- as.character(full.numeric$EDUCATION)
+
+full.numeric$EDUCATION <- recode(full.numeric$EDUCATION,
+                                 NA <- c("0000019","9999997","9999998","9999999"),
+                                 otherwise = "copy")
+
+full.numeric$EDUCATION <- as.factor(full.numeric$EDUCATION)
+
+## Removing Missing Values from SES_INCOMEMTH
+full.numeric$SES_INCOMEMTH <- as.character(full.numeric$SES_INCOMEMTH)
+
+full.numeric$SES_INCOMEMTH <- recode(full.numeric$SES_INCOMEMTH,
+                                     NA <- c("(9999997) Don't know","(9999998) Refused","(9999999) Missing"),
+                                     otherwise = "copy")
+
+full.numeric$SES_INCOMEMTH <- as.factor(full.numeric$SES_INCOMEMTH)
+
+##Removing missing from Type of Offense
+full.numeric$TYPEOFFENSE <- as.character(full.numeric$TYPEOFFENSE)
+
+full.numeric$TYPEOFFENSE <- recode(full.numeric$TYPEOFFENSE,
+                                   NA <- c("(9999997) DK/refused","(9999998) Missing", "(9999999) Blank"),
+                                   otherwise = "copy")
+
+full.numeric$TYPEOFFENSE <- as.factor(full.numeric$TYPEOFFENSE)
+
+#Removing missing from Prior Arrests and Prior Incarcerations
+var <- c("CH_PRIORARREST_CAT", "CH_NUMCAR")
+
+for (i in var) {
+  full.numeric[,i] <- recode(full.numeric[,i],
+                             NA <- c(9999997, 9999998, 9999999),
+                             otherwise ="copy")
+}
+
+```
+
+## Descriptive Statistics
+
+# Methodology
+To predict recidivism, we compare binomial GLM, KNN, decision tree, and random forest using mean-F1 as our measure of accuracy. Our GLM approach  partitions the data as a 70/15/15 train/validate/test while the rest of our methods use k-folds cross validation (k=5) as an alternative to the 70/15/15 partition. 
+
+
+Due to the fact that this data comes from only a single year survey, it is not possible to predict whether or not an individual will become a recidivist in the future. To do this you would hae to follow the same individuals over time and observe which become recidivists and which do not. Instead, what we are predicting is whether an individual already in the system is a redividist or someone new to the correctional system. 
+## GLM
+
+```{r echo = FALSE, warning = FALSE}
+install.packages("mfx") 
+library(mfx) #Package to calculate marginal effects of logit model
+
+#Creating dataframe of just potential model varaibles and then dropping NAs
+model.var <- c("CH_CRIMHIST_COLLAPSED", "OFFENSE_VIOLENT", "OFFENSE_DRUG","OFFENSE_PROPERTY","SES_PHYSABUSED_EVER","CS_SENTENCEMTH", 
+                 "SES_PARENTS_INCARCERATED", "SES_FAMILY_INCARCERATED", "SES_HASCHILDREN", "AGE_CAT", 
+                 "SES_SEXABUSED_EVER", "DRUG_ANYREG", "DRUG_ANYTME", "black.nh", "hispanic", "asian", "state", "EDUCATION","SES_FATHER_INCARCERATED",
+               "DRUG_COCRKTME", "DRUG_HROPTME", "DRUG_METHATME", "LIFE_SENTENCE", "GENDER", "TYPEOFFENSE", "DRUG_MARIJTME",
+               "CH_PRIORARREST_CAT", "SES_LIVE_CHILD_ARREST", "DRUG_ABUSE_ONLY", "DRUG_TRT")
+
+model.data <- full.numeric[model.var]
+
+model.data <- model.data[complete.cases(model.data),]
+
+###Setting up Train/Test/Validate###
+set.seed(42)
+rand <- runif(nrow(model.data))
+
+trainset <- model.data[rand >= 0.3,]
+testset <- model.data[rand >= 0.15 & rand < 0.3,]
+valset <- model.data[rand < 0.15,]
+
+#Set up Mean-F1#
+meanf1 <- function(actual, predicted){
+  
+  classes <- unique(actual)
+  results <- data.frame()
+  for(k in classes){
+    results <- rbind(results, 
+                     data.frame(class.name = k,
+                                weight = sum(actual == k)/length(actual),
+                                precision = sum(predicted == k & actual == k)/sum(predicted == k), 
+                                recall = sum(predicted == k & actual == k)/sum(actual == k)))
+  }
+  results$score <- results$weight * 2 * (results$precision * results$recall) / (results$precision + results$recall) 
+  return(sum(results$score))
+}
+
+###First Predictive Model###
+
+glm.fit <- glm(CH_CRIMHIST_COLLAPSED ~ OFFENSE_VIOLENT + OFFENSE_DRUG + OFFENSE_PROPERTY + CS_SENTENCEMTH +  
+                 SES_PARENTS_INCARCERATED + SES_FAMILY_INCARCERATED + SES_HASCHILDREN + AGE_CAT + 
+                 SES_SEXABUSED_EVER + DRUG_ANYREG + state + GENDER + DRUG_COCRKTME + DRUG_HROPTME + DRUG_ANYTME + DRUG_METHATME +
+                 CH_PRIORARREST_CAT + TYPEOFFENSE + DRUG_TRT + EDUCATION, 
+               data = trainset,
+               family = binomial())
+
+```
+
+We test two cutoffs for prediction in our GLM. First, we default to 0.5 as our cutoff, which produces high sensitivity, but very low specificity. While high sensitivity is good, we feel that erroneously predicting non-recidivists as recidvists could be very harmful. Therefore, we move to a cutoff of .6, which provides a better balance between sensitivity and specificity as shown in the confusion matrixes below. 
+```{r echo = TRUE, warning = FALSE}
+
+#Predict Train and Validate#
+predict.glm.train <- predict(glm.fit, trainset, type = "response")
+predict.glm.val <- predict(glm.fit, valset, type = "response")
+predict.glm.test <- predict(glm.fit, testset, type = "response")
+
+##Mean F1 Calculations for cutoff of 0.5##
+
+#Applying predicted labels
+train.recid <- predict.glm.train > 0.5
+train.recid[train.recid == TRUE] <- "Recidivist"
+train.recid[train.recid == FALSE] <- "First Timer"
+
+#Applying labels to trainset
+train.real <- trainset$CH_CRIMHIST_COLLAPSED
+train.real[train.real == 1] <- "Recidivist"
+train.real[train.real == 0]  <- "First Timer"
+
+#Calculating Mean-F1 for training set
+meanf1(train.real, train.recid) #.801
+
+#Checking confusion matrix#
+table(trainset$CH_CRIMHIST_COLLAPSED, train.recid) #High sensitivity, but low specificity. Probably not what we want. Adjusting cutoff
+
+#Applying predicted labels to predicted set
+val.recid <- predict.glm.val > 0.5
+val.recid[val.recid == TRUE] <- "Recidivist"
+val.recid[val.recid == FALSE] <- "First Timer"
+
+#Applying labels to our original set
+val.real <- valset$CH_CRIMHIST_COLLAPSED
+val.real[val.real== 1] <- "Recidivist"
+val.real[val.real == 0] <- "First Timer"
+
+
+meanf1(val.real, val.recid) # ~.794
+
+#Checking confusion matrix#
+table(val.recid, val.real) #High sensitivity, but low specificity. Probably not what we want. Adjusting cutoff
+
+
+##Mean F1 calculations for cutoff of 0.60##
+
+#Applying predicted labels
+train.recid <- predict.glm.train > 0.60
+train.recid[train.recid == TRUE] <- "Recidivist"
+train.recid[train.recid == FALSE] <- "First Timer"
+
+# Mean F1
+meanf1(train.real, train.recid) #.796
+#Checking confusion matrix#
+table(train.real, train.recid) #Pretty close to a good balance
+
+#Applying predicted labels to validation set
+val.recid <- predict.glm.val > 0.60
+val.recid[val.recid == TRUE] <- "Recidivist"
+val.recid[val.recid == FALSE] <- "First Timer"
+
+# Mean F1
+meanf1(val.real, val.recid) #.794
+
+#Checking confusion matrix#
+table(val.real, val.recid) #Still close to a good balance
+
+#Using test set for .6 cutoff
+test.recid <- predict.glm.test > 0.6
+test.recid[test.recid == TRUE] <- "Recidivist"
+test.recid[test.recid == FALSE] <- "First Timer"
+
+#Applying labels to our original set
+test.real <- testset$CH_CRIMHIST_COLLAPSED
+test.real[test.real== 1] <- "Recidivist"
+test.real[test.real == 0] <- "First Timer"
+
+#Mean F1
+meanf1(test.real, test.recid) #.794
+
+#Confusion matrix
+table(test.real, test.recid)
+```
+The mean F1 for our test set is shown to be .794, with a sensitivity of .828 and a specificity of .702. 
+
+
+We also run our GLM model on the full dataset and calculate the marginal effects at means for each variable. 
+
+```{r echo = TRUE, warning = FALSE}
+##Calculating model with marginal effects
+
+logitmfx(CH_CRIMHIST_COLLAPSED ~ OFFENSE_VIOLENT + OFFENSE_DRUG + OFFENSE_PROPERTY + CS_SENTENCEMTH +  
+           + SES_PARENTS_INCARCERATED + SES_FAMILY_INCARCERATED + SES_HASCHILDREN + AGE_CAT + 
+           + SES_SEXABUSED_EVER + DRUG_ANYREG + state + GENDER + DRUG_COCRKTME + DRUG_HROPTME + DRUG_ANYTME + DRUG_METHATME +
+           + CH_PRIORARREST_CAT + TYPEOFFENSE + DRUG_TRT + EDUCATION, data = full.numeric, robust = TRUE)
+
+```
+
+Our model shows that the primary factors that influence recidivism are drug use, the type of offense committed, prior criminal history, and family criminal history. Education and length of setnence are both not signfiicant. Prisoners who committed a violent crime are 7 percentage points less likey to be a recidivist. If the offense was a property crime, then the probability rises by about 9.7 percent. The type of offense variable is in comparison to murders, and shows that individuals who commit kidnapping, sexual assault, robbery, assualt, or other violent crimes are between 3 and 8 percentage points more likely to be recidivists when compared against murderers. Individuals sentenced for drug possession, weapon crimes, DWIs, and other public order offenses are also between 7 and 8.7 percentage points more likley to be recidivists when compared against murderers. Finally, for every prior arrest an individual has, their probability of being a recidivist increases by 4.6 percentage points. 
+
+
+If an individuals parents were incarcerated, then they are about 1.7 percentage points more likely to be a recidivist, and if anyone in their family was incarcerated they are about 2.4 percentage points more likely to be a recidivist. 
+
+
+Age is consistently a positive factor for recidivism, except for the highest age category which is only significant at the 10 percent level. This is likely due to the fact that younger prisoners have more time to re-enter the system. People between the ages of 65-96 are less likely to be recommitting offenses. 
+
+
+Drug use is also a prominent factor in recidivism. Individuals who regularly did drugs were about 5 percent more likely to be recidivists. While individuals who were using any drug at the time of arrest are about 2.5 percentage points less likely to be recidivists, individuals who were using heroin, crack, or methamphetamines are between 3 and 4 percentage points more likley to be recidivists. This suggests that harder drug use is more common among recidivists while drug use like marijuana is more common among first offenders. Individuals who had been in drug treatment programs are about 4 percentage points more likely to be recidivists. This is likely to be a reverse causality in that recidivists are more often hard drug users and therefore more likely to have ever gone to drug treatment programs, since it is unclear why drug treatment programs would make you more likely to commit a crime. 
+
+
+Finally, women are about 7 percentage points less likely to be recidivist. Those individuals in state prisons are about 6 percentage points more likely to be recidivists. This is likely due to the fact that the average individual is less likely to reguarly commit federal crimes, so those in federal prison are more often first offenders. 
+
+##KNN
+
+##Decision Tree
+
+##Random Forest
+
+#Policy Recommendations
+
+#Conclusion
+
+
+
+
