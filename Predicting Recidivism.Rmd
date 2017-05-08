@@ -472,16 +472,17 @@ Drug use is also a prominent factor in recidivism. Individuals who regularly did
 
 Finally, women are about 7 percentage points less likely to be recidivist. Those individuals in state prisons are about 6 percentage points more likely to be recidivists. This is likely due to the fact that the average individual is less likely to reguarly commit federal crimes, so those in federal prison are more often first offenders. 
 
-##KNN
+## KNN
 
-##Decision Tree
+## Decision Tree
 
-##Random Forest
+## Random Forest
 
-#Policy Recommendations
+# Policy Recommendations
+
 Our GLM analysis shows us that the most important factors influencing recidivism are type of offense, past criminal history, family criminal history, and drug use. Of these factors, drug use is the one that most lends itself towards credible policy recommendations. We see from our analysis that the use of hard drugs at the time of arrest is significantly associated with recidivism, and it also seems that drug abuse is quite prevalent among recidivists since having participated in drug treatment is significantly associated with recidivism. It seems plausible then, that more robust options for drug treatment programs, particularly ones that target individuals before they enter the correctional system, could reduce recidivism. Additionally, for prisoners released on parole who have a past history of drug abuse, providing additional support for drug treatment and training parole officers in how to appropriately manage past drug abusers could help prevent recidivism. 
 
-#Conclusion
+# Conclusion
 
 
 
