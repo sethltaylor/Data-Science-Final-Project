@@ -495,9 +495,336 @@ Finally, women are about 7 percentage points less likely to be recidivist. Those
 
 ## KNN
 
+In a next step, we compare GLM predictions to the K-Nearest-Neighbors (KNN) learning Algorithm.
+KNN is a non-parametric pattern recognition algorithm that measures Euclidean distances in terms of input features for any given record i to all other records in a dataset. The k records with the shortest distance to that point i build the neighborhood from which the value of y(i) can be approximated, because observations that are more similar will likely also be located in the same neighborhood.
+
+In the following, we present our best prediction based on KNN. To see six further KNN models we ran, which include different variables for x and different parameter specifications, please see "1-KNN-Predictions.R" in the Github repository "https://github.com/GeorgetownMcCourt/Predicting-Recidivism/tree/master/Scripts".
+
+```{r}
+library(class) # for kNN
+
+# Mean F1 function to test accuracy of predictions
+meanf1 <- function(actual, predicted){
+  #Mean F1 score function
+  #actual = a vector of actual labels
+  #predicted = predicted labels
+  
+  classes <- unique(actual)
+  results <- data.frame()
+  for(k in classes){
+    results <- rbind(results, 
+                     data.frame(class.name = k,
+                                weight = sum(actual == k)/length(actual),
+                                precision = sum(predicted == k & actual == k)/sum(predicted == k), 
+                                recall = sum(predicted == k & actual == k)/sum(actual == k)))
+  }
+  results$score <- results$weight * 2 * (results$precision * results$recall) / (results$precision + results$recall) 
+  return(sum(results$score))
+}
+
+
+# Function for k-folds
+kfolds.index <- function(n, k, random = TRUE){
+  # Returns a vector of labels for each of k-folds. 
+  # Useful for setting up k-folds cross validation
+  #
+  # Args:
+  #       n: data size
+  #       k: k-folds
+  #       random: whether folds should be sequential or randomized (default)
+  #
+  # Returns:
+  #       Vector of numeric labels
+  
+  #create row index
+  row.id <- 1:n
+  
+  #Decide splits
+  break.id <- cut(row.id, breaks = k, labels = FALSE)
+  
+  #Randomize
+  if(random == TRUE){
+    row.id <- row.id[sample(row.id, replace = FALSE)]
+  }
+  
+  #Package up
+  out <- data.frame(row.id = row.id, folds = break.id)
+  out <- out[order(out$row.id), ]
+  return(out[,2])
+}
+
+#Set placeholder for (mean) errors
+error.train <- c() # will calculate meanf1 for train data
+error.test <- c() # will calculate meanf1 for test data
+error.val <- c() # will calculate meanf1 for validation data set aside previously
+
+## Model A.g) variables with best GLM results and k=3
+
+#Creating dataframe of just potential model varaibles and then dropping NAs
+vars.opt <- c("ID", "CH_CRIMHIST_COLLAPSED", "OFFENSE_VIOLENT", "OFFENSE_DRUG","OFFENSE_PROPERTY","SES_PHYSABUSED_EVER",
+          "CS_SENTENCEMTH", "SES_PARENTS_INCARCERATED", "SES_FAMILY_INCARCERATED", "SES_HASCHILDREN", "AGE_CAT", 
+          "SES_SEXABUSED_EVER", "DRUG_ANYREG", "DRUG_ANYTME", "black.nh", "hispanic", "asian", "state", "EDUCATION",
+          "SES_FATHER_INCARCERATED", "DRUG_COCRKTME", "DRUG_HROPTME", "DRUG_METHATME", "LIFE_SENTENCE", "GENDER", "TYPEOFFENSE", 
+          "DRUG_MARIJTME", "CH_PRIORARREST_CAT", "SES_LIVE_CHILD_ARREST", "DRUG_ABUSE_ONLY", "DRUG_TRT")
+
+full.opt <- full.numeric[,names(full.numeric) %in% vars.opt]
+
+full.opt <- full.opt[complete.cases(full.opt),] # 13260 obs.
+
+full.opt$EDUCATION <- as.numeric(full.opt$EDUCATION)
+full.opt$AGE_CAT <- as.numeric(full.opt$AGE_CAT)
+full.opt$TYPEOFFENSE <- as.numeric(full.opt$TYPEOFFENSE)
+full.opt$state <- as.numeric(full.opt$state)
+
+## set aside 15% of full.numeric data for validation purposes (in addition to k-fold testing and training)
+
+smp_size <- floor(0.15 * nrow(full.opt))
+
+set.seed(123)
+val_ind <- sample(seq_len(nrow(full.opt)), size = smp_size)
+
+# partiion using the index created
+full.val <- full.opt[val_ind, ]
+full.train <- full.opt[-val_ind, ]
+
+
+## break train dataset into k-folds
+
+n <- nrow(full.train)
+k <- 5 # k is arbitrarily chosen, probably a bit high and therefore time intensive
+
+full.train$folds <- kfolds.index(n, k)
+
+
+#Run kfolds
+for(k in 1:5){
+  
+  #Cut train/test
+  train.k <- full.train[full.train$folds != k, ]
+  test.k <- full.train[full.train$folds == k, ]
+  
+  #vector y for index of columns that are not part of x
+  y <- c("ID", "CH_CRIMHIST_COLLAPSED", "folds")
+  
+  #KNN predictions for train, test, and validate
+  pred.train <- knn(train.k[,!names(train.k) %in% y], train.k[,!names(train.k) %in% y], cl=train.k$CH_CRIMHIST_COLLAPSED, k=3)
+  pred.test <- knn(train.k[,!names(train.k) %in% y], test.k[,!names(test.k) %in% y], cl=train.k$CH_CRIMHIST_COLLAPSED, k=3)
+  pred.val <- knn(train.k[,!names(train.k) %in% y], full.val[,!names(full.val) %in% y], cl=train.k$CH_CRIMHIST_COLLAPSED, k=3)
+  
+  #calc error, log it
+  error.train <- c(error.train, meanf1(train.k$CH_CRIMHIST_COLLAPSED, pred.train))
+  error.test <- c(error.test, meanf1(test.k$CH_CRIMHIST_COLLAPSED, pred.test))
+  error.val <- c(error.val, meanf1(full.val$CH_CRIMHIST_COLLAPSED, pred.val)) 
+}
+
+# add mean error values to model.errors
+model.errors.knn <- c(mean(error.train), mean(error.test), mean(error.val))
+# best prediction so far
+
+#Set empty placeholders again
+error.train <- c()
+error.test <- c()
+error.val <- c()
+
+# rerun Model on full dataset
+pred.full.opt <- knn(full.opt[,!names(full.opt) %in% y], full.opt[,!names(full.opt) %in% y], cl=full.opt$CH_CRIMHIST_COLLAPSED, k=3)
+meanf1(full.opt$CH_CRIMHIST_COLLAPSED, pred.full.opt)
+
+# confusion matrix
+c.matrix.knn <- table(full.opt$CH_CRIMHIST_COLLAPSED, pred.full.opt)
+c.matrix.knn
+
+accuracy.knn <- (c.matrix.knn[1,1] + c.matrix.knn[2,2])/nrow(full.opt) # (TP + TN) / nobs
+accuracy.knn
+
+tpr.knn <- c.matrix.knn[2,2] / (c.matrix.knn[2,2] + c.matrix.knn[2,1]) # TP/(TP+FN)
+tpr.knn
+
+tnr.knn <- c.matrix.knn[1,1] / (c.matrix.knn[1,1] + c.matrix.knn[1,2]) # TN/(TN+FP)
+tnr.knn
+
+ppv.knn <- c.matrix.knn[2,2] / (c.matrix.knn[2,2] + c.matrix.knn[1,2]) # TP/(TP+FP)
+ppv.knn
+
+# plot ROC
+roc.knn <- data.frame("true" = full.opt$CH_CRIMHIST_COLLAPSED, "predicted" = pred.full.opt, 
+               "ROC" = character(length( full.opt$CH_CRIMHIST_COLLAPSED)))
+
+roc.knn$ROC <- ifelse(roc.knn$true == 1 & roc.knn$predicted == 1, "TP",
+                ifelse(roc.knn$true == 0 & roc.knn$predicted == 1, "FP",
+                  ifelse(roc.knn$true == 1 & roc.knn$predicted == 0, "FN",
+                    ifelse(roc.knn$true == 0 & roc.knn$predicted == 0, "TN", NA ))))
+
+ggplot(roc.knn, aes(x=ROC, colour = ROC, fill=ROC)) + geom_histogram(stat="count") + labs(title="KNN Predictions")
+```
+
+
+
 ## Decision Tree
 
+```{r}
+## Model B.d) Decision Tree with variables from best GLM result and DT.opt
+
+#Run kfolds
+for(k in 1:5){
+  
+  #Cut train/test
+  train.d <- full.train[full.train$folds != k, ]
+  test.d <- full.train[full.train$folds == k, ]
+  
+  #vector y for index of columns that are not part of x
+  y <- c("ID", "CH_CRIMHIST_COLLAPSED", "folds")
+  
+  # estimate model
+  dt.opt.opt <- rpart(CH_CRIMHIST_COLLAPSED ~ OFFENSE_VIOLENT + OFFENSE_DRUG +OFFENSE_PROPERTY +SES_PHYSABUSED_EVER +
+                        CS_SENTENCEMTH + SES_PARENTS_INCARCERATED + SES_FAMILY_INCARCERATED + SES_HASCHILDREN + AGE_CAT + 
+                        SES_SEXABUSED_EVER + DRUG_ANYREG + DRUG_ANYTME + black.nh + hispanic + asian + state + EDUCATION +
+                        SES_FATHER_INCARCERATED + DRUG_COCRKTME + DRUG_HROPTME + DRUG_METHATME + LIFE_SENTENCE + GENDER + 
+                        TYPEOFFENSE + DRUG_MARIJTME + CH_PRIORARREST_CAT + SES_LIVE_CHILD_ARREST + DRUG_ABUSE_ONLY + DRUG_TRT, 
+                        method = "class", data = train.d, cp=0.003)
+  
+  # Decision Tree predictions for train, test, and validate
+  pred.train <- predict(dt.opt.opt, train.d, type = "class")
+  pred.test <- predict(dt.opt.opt, test.d, type = "class")
+  pred.val <- predict(dt.opt.opt, full.val, type = "class")
+  
+  #calc error, log it
+  error.train <- c(error.train, meanf1(train.d$CH_CRIMHIST_COLLAPSED, pred.train))
+  error.test <- c(error.test, meanf1(test.d$CH_CRIMHIST_COLLAPSED, pred.test))
+  error.val <- c(error.val, meanf1(full.val$CH_CRIMHIST_COLLAPSED, pred.val)) 
+}
+
+# add mean error values to model.errors
+model.errors.dt <- c(mean(error.train), mean(error.test), mean(error.val))
+# best prediction so far
+
+#Set empty placeholders again
+error.train <- c()
+error.test <- c()
+error.val <- c()
+
+# rerun Model on full dataset
+dt.full <- rpart(CH_CRIMHIST_COLLAPSED ~ OFFENSE_VIOLENT + OFFENSE_DRUG +OFFENSE_PROPERTY +SES_PHYSABUSED_EVER +
+                   CS_SENTENCEMTH + SES_PARENTS_INCARCERATED + SES_FAMILY_INCARCERATED + SES_HASCHILDREN + AGE_CAT + 
+                   SES_SEXABUSED_EVER + DRUG_ANYREG + DRUG_ANYTME + black.nh + hispanic + asian + state + EDUCATION +
+                   SES_FATHER_INCARCERATED + DRUG_COCRKTME + DRUG_HROPTME + DRUG_METHATME + LIFE_SENTENCE + GENDER + 
+                   TYPEOFFENSE + DRUG_MARIJTME + CH_PRIORARREST_CAT + SES_LIVE_CHILD_ARREST + DRUG_ABUSE_ONLY + DRUG_TRT,
+                   method = "class", data = full.opt, cp=0.003)
+pred.full.dt <- predict(dt.full, full.opt, type = "class")
+meanf1(full.opt$CH_CRIMHIST_COLLAPSED, pred.full.dt)
+
+# confusion matrix
+c.mat.dt <- table(full.opt$CH_CRIMHIST_COLLAPSED, pred.full.dt)
+c.mat.dt
+
+accuracy.dt <- (c.mat.dt[1,1] + c.mat.dt[2,2])/nrow(full.opt) # (TP + TN) / nobs
+accuracy.dt
+
+tpr.dt <- c.mat.dt[2,2] / (c.mat.dt[2,2] + c.mat.dt[2,1]) # TP/(TP+FN)
+tpr.dt
+
+tnr.dt <- c.mat.dt[1,1] / (c.mat.dt[1,1] + c.mat.dt[1,2]) # TN/(TN+FP)
+tnr.dt
+
+ppv.dt <- c.mat.dt[2,2] / (c.mat.dt[2,2] + c.mat.dt[1,2]) # TP/(TP+FP)
+ppv.dt
+
+# plot ROC
+roc.dt <- data.frame("true" = full.opt$CH_CRIMHIST_COLLAPSED, "predicted" = pred.full.dt, 
+                      "ROC" = character(length( full.opt$CH_CRIMHIST_COLLAPSED)))
+
+roc.dt$ROC <- ifelse(roc.dt$true == 1 & roc.dt$predicted == 1, "TP",
+                      ifelse(roc.dt$true == 0 & roc.dt$predicted == 1, "FP",
+                             ifelse(roc.dt$true == 1 & roc.dt$predicted == 0, "FN",
+                                    ifelse(roc.dt$true == 0 & roc.dt$predicted == 0, "TN", NA ))))
+
+ggplot(roc.dt, aes(x=ROC, colour = ROC, fill=ROC)) + geom_histogram(stat="count")  + labs(title="Decision Tree Predictions")
+
+```
+
+
 ## Random Forest
+
+```{r}
+## Model C.d) Fine Tuning of RF with k=4 and optimal variables from GLM Prediction
+
+#Run kfolds
+for(k in 1:5){
+  
+  #Cut train/test
+  train.r <- full.train[full.train$folds != k, ]
+  test.r <- full.train[full.train$folds == k, ]
+  
+  # estimate model
+  rf.opt.opt <- randomForest(as.factor(CH_CRIMHIST_COLLAPSED) ~ OFFENSE_VIOLENT + OFFENSE_DRUG +OFFENSE_PROPERTY +
+                               SES_PHYSABUSED_EVER + CS_SENTENCEMTH + SES_PARENTS_INCARCERATED + SES_FAMILY_INCARCERATED + 
+                               SES_HASCHILDREN + AGE_CAT + SES_SEXABUSED_EVER + DRUG_ANYREG + DRUG_ANYTME + black.nh + 
+                               hispanic + asian + state + EDUCATION + SES_FATHER_INCARCERATED + DRUG_COCRKTME + DRUG_HROPTME +
+                               DRUG_METHATME + LIFE_SENTENCE + GENDER + TYPEOFFENSE + DRUG_MARIJTME + CH_PRIORARREST_CAT +
+                               SES_LIVE_CHILD_ARREST + DRUG_ABUSE_ONLY + DRUG_TRT, 
+                               data = train.r, mtry=4)
+  
+  # Decision Tree predictions for train, test, and validate
+  pred.train <- predict(rf.opt.opt, train.r, type = "class")
+  pred.test <- predict(rf.opt.opt, test.r, type = "class")
+  pred.val <- predict(rf.opt.opt, full.val, type = "class")
+  
+  # calc error, log it
+  error.train <- c(error.train, meanf1(train.r$CH_CRIMHIST_COLLAPSED, pred.train))
+  error.test <- c(error.test, meanf1(test.r$CH_CRIMHIST_COLLAPSED, pred.test))
+  error.val <- c(error.val, meanf1(full.val$CH_CRIMHIST_COLLAPSED, pred.val)) 
+  
+}
+
+# add mean error values to model.errors
+model.errors.rf <- c(mean(error.train), mean(error.test), mean(error.val))
+# only slightly better than RF default for train and test
+
+#Set empty placeholders again
+error.train <- c()
+error.test <- c()
+error.val <- c()
+
+rf.full.opt.opt <- randomForest(as.factor(CH_CRIMHIST_COLLAPSED) ~ OFFENSE_VIOLENT + OFFENSE_DRUG +OFFENSE_PROPERTY +
+                                  SES_PHYSABUSED_EVER + CS_SENTENCEMTH + SES_PARENTS_INCARCERATED + SES_FAMILY_INCARCERATED + 
+                                  SES_HASCHILDREN + AGE_CAT + SES_SEXABUSED_EVER + DRUG_ANYREG + DRUG_ANYTME + black.nh + 
+                                  hispanic + asian + state + EDUCATION + SES_FATHER_INCARCERATED + DRUG_COCRKTME + DRUG_HROPTME +
+                                  DRUG_METHATME + LIFE_SENTENCE + GENDER + TYPEOFFENSE + DRUG_MARIJTME + CH_PRIORARREST_CAT +
+                                  SES_LIVE_CHILD_ARREST + DRUG_ABUSE_ONLY + DRUG_TRT, 
+                                  data = full.opt, mtry=4)
+pred.full.rf <- predict(rf.full.opt.opt, full.opt, type = "class")
+meanf1(full.opt$CH_CRIMHIST_COLLAPSED, pred.full.rf)
+
+# confusion matrix
+c.mat.rf <- table(full.opt$CH_CRIMHIST_COLLAPSED, pred.full.rf) # sensitivity and specificity pretty much like RF default
+c.mat.rf
+
+accuracy.rf <- (c.mat.rf[1,1] + c.mat.rf[2,2])/nrow(full.opt) # (TP + TN) / nobs
+accuracy.rf
+
+tpr.rf <- c.mat.rf[2,2] / (c.mat.rf[2,2] + c.mat.rf[2,1]) # TP/(TP+FN)
+tpr.rf
+
+tnr.rf <- c.mat.rf[1,1] / (c.mat.rf[1,1] + c.mat.rf[1,2]) # TN/(TN+FP)
+tnr.rf
+
+ppv.rf <- c.mat.rf[2,2] / (c.mat.rf[2,2] + c.mat.rf[1,2]) # TP/(TP+FP)
+ppv.rf
+
+# plot ROC
+roc.rf <- data.frame("true" = full.opt$CH_CRIMHIST_COLLAPSED, "predicted" = pred.full.rf, 
+                     "ROC" = character(length( full.opt$CH_CRIMHIST_COLLAPSED)))
+
+roc.rf$ROC <- ifelse(roc.rf$true == 1 & roc.rf$predicted == 1, "TP",
+                     ifelse(roc.rf$true == 0 & roc.rf$predicted == 1, "FP",
+                            ifelse(roc.rf$true == 1 & roc.rf$predicted == 0, "FN",
+                                   ifelse(roc.rf$true == 0 & roc.rf$predicted == 0, "TN", NA ))))
+
+ggplot(roc.rf, aes(x=ROC, colour = ROC, fill=ROC)) + geom_histogram(stat="count") + labs(title="Random Forest Predictions")
+
+```
+
+
 
 # Policy Recommendations
 
