@@ -863,7 +863,7 @@ Our GLM analysis shows us that the most important factors influencing recidivism
 
 # Conclusion
 
-Predictive algorithms for recidivism risk have already started being used in the U.S. court system (http://nyti.ms/2qjkV6Q), and have proved controversial. Although the results from our analysis are not highly predictive, they are useful in understanding how bias might affect the results of predictive algorithms. Due to the fact that our data comes from a single year survey, missingness from non-response presents a possibly significant source of bias in our results and our predictive results lack generalizability to the overall population. 
+Predictive algorithms for recidivism risk have already started being used in the U.S. court system (http://nyti.ms/2qjkV6Q), and have proved controversial. Although the results from our analysis are not highly predictive, they are useful in understanding how bias might affect the results of predictive algorithms. Due to the fact that our data comes from a single year survey, missingness from non-response presents a possibly significant source of bias in our results and our predictive results lack generalizability to the overall population. Furthermore, surveys conducted in previous years and years following 2004 had great variation in the characteristics they sought to cover and it is quite possible that the 2004 survey does not capture all aspects that effect recidivism. 
 
 
 Future efforts in predicting recidivism risk would require following the same individuals over time to examine how many become recidivists. Some organizations, such as UChicago's Center for Data Science and Policy, have already begun this work studying individuals at the county level in Illinois. 
