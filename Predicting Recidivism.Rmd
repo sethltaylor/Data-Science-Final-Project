@@ -291,26 +291,35 @@ model.data <- model.data[complete.cases(model.data),]
 ```
 
 ## Descriptive Statistics
-```{r echo = FALSE, warning = FALSE, results = asis}
-summary(model.data)
+```{r echo = TRUE, warning = FALSE, message = FALSE}
+#install.packages("stargazer") #Uncomment if need to install stargazer
+library(stargazer)
+stargazer(model.data, type = "text", title="Descriptive statistics", digits=2, header = FALSE)
+
+```
+
+```{r echo = TRUE, fig.align="center"}
+factorvar <- data.frame(model.data$EDUCATION, model.data$AGE_CAT, model.data$TYPEOFFENSE)
+summary(factorvar)
 ```
 
 Our descriptive statistics show that about 68 percent of our sample are recidivists, 37 percent committed a violent offense, 27 percent committed a drug offense, and 20 percent committed a propery crime. The average sentence for inmates is 132 months or 11 years, and roughly 80% of those inmates reside in state prisons.The average number of prior arrests for prisoners in our sample is 5. The most common crime committed is drug trafficking, followed by robbery, drug possession, and assault. 
 
 
-Prisoners are most commonly between 25 and 44 years old, with relatively few prisoners above the age of 55. Prisoners are most commonly highschool educated to some degree. About 71 percent of prisoners have children. 38 percent of our sample is black, about 19 percent is hispanic, and about .9% is asian. The remaining 42 percent is categorized as white or other race. Roughly 22 percent of our sample is female. 
+Prisoners are most commonly between 25 and 44 years old, with relatively few prisoners above the age of 55. Prisoners are most commonly highschool educated to some degree. About 71 percent of prisoners have children. 38 percent of our sample is black, about 19 percent is hispanic, and about 1% is asian. The remaining 42 percent is categorized as white or other race. Roughly 22 percent of our sample is female. 
 
 
-About 19 percent of our sample reported ever being physically abused, and 12 percent reported ever being sexually abused. About 17.5 percent of prisoners have at least one parent who has been incarcerated (this is equivalent to the father incarcerated variable suggesting this is commonly the father who is incarcerated and not the mother), and 38 percent have family members who have been incarcerated. Drug use is common among prisoners, with 73 percent having regularly used any drug, and 34 percent of prisoners using drugs at the time of arrest. The most common drug used at the time of arrest was marijuana, followed by crack coccaine, meth, and heroin. 61.5 percent of our sample has been in a drug treatment program at least once, with 17.35 classifying themselves as a drug abuser. 
+About 19 percent of our sample reported ever being physically abused, and 12 percent reported ever being sexually abused. About 17.5 percent of prisoners have at least one parent who has been incarcerated (this is equivalent to the father incarcerated variable suggesting this is commonly the father who is incarcerated and not the mother), and 38 percent have family members who have been incarcerated. Drug use is common among prisoners, with 73 percent having regularly used any drug, and 34 percent of prisoners using drugs at the time of arrest. The most common drug used at the time of arrest was marijuana, followed by crack coccaine, meth, and heroin. 61.5 percent of our sample has been in a drug treatment program at least once, with 17 percent classifying themselves as a drug abuser. 
 
 # Methodology
 To predict recidivism, we compare binomial GLM, KNN, decision tree, and random forest using mean-F1 as our measure of accuracy. Our GLM approach  partitions the data as a 70/15/15 train/validate/test while the rest of our methods use k-folds cross validation (k=5) as an alternative to the 70/15/15 partition. 
 
 
 Due to the fact that this data comes from only a single year survey, it is not possible to predict whether or not an individual will become a recidivist in the future. To do this you would hae to follow the same individuals over time and observe which become recidivists and which do not. Instead, what we are predicting is whether an individual already in the system is a redividist or someone new to the correctional system. 
+
 ## GLM
 
-```{r echo = FALSE, warning = FALSE}
+```{r echo = FALSE, warning = FALSE, include = FALSE}
 #install.packages("mfx") #uncomment if install is needed
 library(mfx) #Package to calculate marginal effects of logit model
 
@@ -350,7 +359,7 @@ glm.fit <- glm(CH_CRIMHIST_COLLAPSED ~ OFFENSE_VIOLENT + OFFENSE_DRUG + OFFENSE_
 ```
 
 We test two cutoffs for prediction in our GLM. First, we default to 0.5 as our cutoff, which produces high sensitivity, but very low specificity. While high sensitivity is good, we feel that erroneously predicting non-recidivists as recidvists could be very harmful. Therefore, we move to a cutoff of .6, which provides a better balance between sensitivity and specificity as shown in the confusion matrixes below. 
-```{r echo = TRUE, warning = FALSE}
+```{r echo = FALSE, warning = FALSE}
 
 #Predict Train and Validate#
 predict.glm.train <- predict(glm.fit, trainset, type = "response")
@@ -373,28 +382,27 @@ train.real[train.real == 0]  <- "First Timer"
 trainf1.5 <- meanf1(train.real, train.recid) #.801
 
 #Checking confusion matrix#
-#table(trainset$CH_CRIMHIST_COLLAPSED, train.recid) #High sensitivity, but low specificity. Probably not what we want. Adjusting cutoff
+#table(trainset$CH_CRIMHIST_COLLAPSED, train.recid) #High sensitivity, but low specificity. 
 
-#
+# Applying predicted labels to predicted set
 val.recid <- predict.glm.val > 0.5
 val.recid[val.recid == TRUE] <- "Recidivist"
 val.recid[val.recid == FALSE] <- "First Timer"
-
-#Applying predicted labels to predicted set
-test.recid <- predict.glm.test > 0.5
-test.recid[test.recid == TRUE] <- "Recidivist"
-test.recid[test.recid == FALSE] <- "First Timer"
 
 #Applying labels to our original set
 val.real <- valset$CH_CRIMHIST_COLLAPSED
 val.real[val.real== 1] <- "Recidivist"
 val.real[val.real == 0] <- "First Timer"
 
-
 valf1.5 <- meanf1(val.real, val.recid) # ~.794
 
 #Checking confusion matrix#
 #table(val.recid, val.real) #High sensitivity, but low specificity. Probably not what we want. Adjusting cutoff
+
+#Applying predicted labels to predicted set
+test.recid <- predict.glm.test > 0.5
+test.recid[test.recid == TRUE] <- "Recidivist"
+test.recid[test.recid == FALSE] <- "First Timer"
 
 #Applying labels to our original set
 test.real <- testset$CH_CRIMHIST_COLLAPSED
@@ -435,7 +443,7 @@ testf1.6 <- meanf1(test.real, test.recid) #.794
 
 ```
 
-```{r echo = TRUE, warning = FALSE, results = asis}
+```{r echo = TRUE, warning = FALSE, fig.align="center"}
 library(knitr)
 
 #Creating dataframe of Mean-F1s for the .5 and .6 cutoffs
@@ -449,7 +457,8 @@ row.names(f1s) <- c("Train", "Validate", "Test")
 colnames(f1s) <- c("0.5 Cutoff", "0.6 Cutoff")
 kable(f1s, format = "markdown")
 
-#Displaying just the confusion matrix for our final test prediction algonside all of our mean f1s. Set echo = True in previous code chunk to see all confusion matrixes. 
+#Displaying just the confusion matrix for our final test prediction. 
+#Uncomment tables in previous code chunk to see all confusion matrixes. 
 
 #Confusion matrix for testset
 table(test.real, test.recid)
@@ -459,14 +468,15 @@ The mean F1 for our test set at the 0.6 cutoff is shown to be .794, with a sensi
 
 We also run our GLM model on the full dataset and calculate the marginal effects at means for each variable. 
 
-```{r echo = TRUE, warning = FALSE}
+```{r echo = TRUE, warning = FALSE, fig.align="center"}
 ##Calculating model with marginal effects
 
-logitmfx(CH_CRIMHIST_COLLAPSED ~ OFFENSE_VIOLENT + OFFENSE_DRUG + OFFENSE_PROPERTY + CS_SENTENCEMTH +  
+mfx.fit <- logitmfx(CH_CRIMHIST_COLLAPSED ~ OFFENSE_VIOLENT + OFFENSE_DRUG + OFFENSE_PROPERTY + CS_SENTENCEMTH +  
            + SES_PARENTS_INCARCERATED + SES_FAMILY_INCARCERATED + SES_HASCHILDREN + AGE_CAT + 
            + SES_SEXABUSED_EVER + DRUG_ANYREG + state + GENDER + DRUG_COCRKTME + DRUG_HROPTME + DRUG_ANYTME + DRUG_METHATME +
            + CH_PRIORARREST_CAT + TYPEOFFENSE + DRUG_TRT + EDUCATION, data = full.numeric, robust = TRUE)
 
+stargazer(mfx.fit$mfxest, type = 'text', title = 'Logistic Regression: Marginal Effects')
 ```
 
 Our model shows that the primary factors that influence recidivism are drug use, the type of offense committed, prior criminal history, and family criminal history. Education and length of setnence are both not signfiicant. Prisoners who committed a violent crime are 7 percentage points less likey to be a recidivist. If the offense was a property crime, then the probability rises by about 9.7 percent. The type of offense variable is in comparison to murders, and shows that individuals who commit kidnapping, sexual assault, robbery, assualt, or other violent crimes are between 3 and 8 percentage points more likely to be recidivists when compared against murderers. Individuals sentenced for drug possession, weapon crimes, DWIs, and other public order offenses are also between 7 and 8.7 percentage points more likley to be recidivists when compared against murderers. Finally, for every prior arrest an individual has, their probability of being a recidivist increases by 4.6 percentage points. 
