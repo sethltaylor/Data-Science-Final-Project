@@ -65,7 +65,7 @@ full.an$ID <- as.character(full.an$ID)
 
 ```
 
-Since this data is survey data, it requires further cleaning and recoding to ensure it is appropriate for analysis and to handle missigness. We use the package "memisc", which is deisgned to handle survey data. 
+Since this data is survey data, it requires further cleaning and recoding to ensure it is appropriate for analysis and to handle missigness (coded in the survey as values from 999997 to 999999). We use the package "memisc", which is designed to handle survey data. 
 
 ```{r echo = FALSE, warning = FALSE}
 
@@ -285,7 +285,7 @@ for (i in var) {
 To predict recidivism, we compare binomial GLM, KNN, decision tree, and random forest using mean-F1 as our measure of accuracy. Our GLM approach  partitions the data as a 70/15/15 train/validate/test while the rest of our methods use k-folds cross validation (k=5) as an alternative to the 70/15/15 partition. 
 
 
-Due to the fact that this data comes from only a single year survey, it is not possible to predict whether or not an individual will become a recidivist in the future. To do this you would have to follow the same individuals over time and observe which become recidivists and which do not. Instead, what we are predicting is whether an individual already in the system is a redividist or someone new to the correctional system. 
+Due to the fact that this data comes from only a single year survey, it is not possible to predict whether or not an individual will become a recidivist in the future. To do this you would hae to follow the same individuals over time and observe which become recidivists and which do not. Instead, what we are predicting is whether an individual already in the system is a redividist or someone new to the correctional system. 
 ## GLM
 
 ```{r echo = FALSE, warning = FALSE}
@@ -359,15 +359,20 @@ train.real[train.real == 1] <- "Recidivist"
 train.real[train.real == 0]  <- "First Timer"
 
 #Calculating Mean-F1 for training set
-meanf1(train.real, train.recid) #.801
+trainf1.5 <- meanf1(train.real, train.recid) #.801
 
 #Checking confusion matrix#
 table(trainset$CH_CRIMHIST_COLLAPSED, train.recid) #High sensitivity, but low specificity. Probably not what we want. Adjusting cutoff
 
-#Applying predicted labels to predicted set
+#
 val.recid <- predict.glm.val > 0.5
 val.recid[val.recid == TRUE] <- "Recidivist"
 val.recid[val.recid == FALSE] <- "First Timer"
+
+#Applying predicted labels to predicted set
+test.recid <- predict.glm.test > 0.5
+test.recid[test.recid == TRUE] <- "Recidivist"
+test.recid[test.recid == FALSE] <- "First Timer"
 
 #Applying labels to our original set
 val.real <- valset$CH_CRIMHIST_COLLAPSED
@@ -375,12 +380,17 @@ val.real[val.real== 1] <- "Recidivist"
 val.real[val.real == 0] <- "First Timer"
 
 
-meanf1(val.real, val.recid) # ~.794
+valf1.5 <- meanf1(val.real, val.recid) # ~.794
 
 #Checking confusion matrix#
 table(val.recid, val.real) #High sensitivity, but low specificity. Probably not what we want. Adjusting cutoff
 
+#Applying labels to our original set
+test.real <- testset$CH_CRIMHIST_COLLAPSED
+test.real[test.real== 1] <- "Recidivist"
+test.real[test.real == 0] <- "First Timer"
 
+testf1.5 <- meanf1(test.real, test.recid)
 ##Mean F1 calculations for cutoff of 0.60##
 
 #Applying predicted labels
@@ -389,7 +399,7 @@ train.recid[train.recid == TRUE] <- "Recidivist"
 train.recid[train.recid == FALSE] <- "First Timer"
 
 # Mean F1
-meanf1(train.real, train.recid) #.796
+trainf1.6 <- meanf1(train.real, train.recid) #.796
 #Checking confusion matrix#
 table(train.real, train.recid) #Pretty close to a good balance
 
@@ -399,7 +409,7 @@ val.recid[val.recid == TRUE] <- "Recidivist"
 val.recid[val.recid == FALSE] <- "First Timer"
 
 # Mean F1
-meanf1(val.real, val.recid) #.794
+valf1.6 <- meanf1(val.real, val.recid) #.794
 
 #Checking confusion matrix#
 table(val.real, val.recid) #Still close to a good balance
@@ -409,18 +419,31 @@ test.recid <- predict.glm.test > 0.6
 test.recid[test.recid == TRUE] <- "Recidivist"
 test.recid[test.recid == FALSE] <- "First Timer"
 
-#Applying labels to our original set
-test.real <- testset$CH_CRIMHIST_COLLAPSED
-test.real[test.real== 1] <- "Recidivist"
-test.real[test.real == 0] <- "First Timer"
-
 #Mean F1
-meanf1(test.real, test.recid) #.794
+testf1.6 <- meanf1(test.real, test.recid) #.794
 
-#Confusion matrix
+```
+
+```{r echo = TRUE, warning = False}
+library(knitr)
+
+#Creating dataframe of Mean-F1s for the .5 and .6 cutoffs
+
+f1.5 <- c(trainf1.5, valf1.5, testf1.5)
+
+f1.6<- c(trainf1.6, valf1.6, testf1.6)
+
+f1s <- data.frame(f1.5, f1.6)
+row.names(f1s) <- c("Train", "Validate", "Test")
+colnames(f1s) <- c("0.5 Cutoff", "0.6 Cutoff")
+kable(f1s, format = "markdown")
+
+#Displaying just the confusion matrix for our final test prediction algonside all of our mean f1s. Set echo = True in previous code chunk to see all confusion matrixes. 
+
+#Confusion matrix for testset
 table(test.real, test.recid)
 ```
-The mean F1 for our test set is shown to be .794, with a sensitivity of .828 and a specificity of .702. 
+The mean F1 for our test set at the 0.6 cutoff is shown to be .794, with a sensitivity of .828 and a specificity of .702. 
 
 
 We also run our GLM model on the full dataset and calculate the marginal effects at means for each variable. 
@@ -456,6 +479,7 @@ Finally, women are about 7 percentage points less likely to be recidivist. Those
 ##Random Forest
 
 #Policy Recommendations
+Our GLM analysis shows us that the most important factors influencing recidivism are type of offense, past criminal history, family criminal history, and drug use. Of these factors, drug use is the one that most lends itself towards credible policy recommendations. We see from our analysis that the use of hard drugs at the time of arrest is significantly associated with recidivism, and it also seems that drug abuse is quite prevalent among recidivists since having participated in drug treatment is significantly associated with recidivism. It seems plausible then, that more robust options for drug treatment programs, particularly ones that target individuals before they enter the correctional system, could reduce recidivism. Additionally, for prisoners released on parole who have a past history of drug abuse, providing additional support for drug treatment and training parole officers in how to appropriately manage past drug abusers could help prevent recidivism. 
 
 #Conclusion
 
