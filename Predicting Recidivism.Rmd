@@ -23,9 +23,9 @@ The data used in this project is retrieved from the 2004 Survey of Inmates in St
 
 We combine the data from the federal analysis and state analysis datasets for our analysis, which provides information on 14,499 prisoners in the state correctional system and 3686 prisoners in the federal correctional system. 
 
-```{r echo = FALSE, warning = FALSE}
+```{r echo = FALSE, warning = FALSE, message = FALSE}
 
-install.packages("memisc") 
+#install.packages("memisc") #uncomment if install is needed
 library(memisc)
 
 #### 1) DATA EXTRACTION ####
@@ -277,9 +277,31 @@ for (i in var) {
                              otherwise ="copy")
 }
 
+#Creating dataframe of just potential model varaibles and then dropping NAs
+model.var <- c("CH_CRIMHIST_COLLAPSED", "OFFENSE_VIOLENT", "OFFENSE_DRUG","OFFENSE_PROPERTY","SES_PHYSABUSED_EVER","CS_SENTENCEMTH", 
+                 "SES_PARENTS_INCARCERATED", "SES_FAMILY_INCARCERATED", "SES_HASCHILDREN", "AGE_CAT", 
+                 "SES_SEXABUSED_EVER", "DRUG_ANYREG", "DRUG_ANYTME", "black.nh", "hispanic", "asian", "state", "EDUCATION","SES_FATHER_INCARCERATED",
+               "DRUG_COCRKTME", "DRUG_HROPTME", "DRUG_METHATME", "GENDER", "TYPEOFFENSE", "DRUG_MARIJTME",
+               "CH_PRIORARREST_CAT", "SES_LIVE_CHILD_ARREST", "DRUG_ABUSE_ONLY", "DRUG_TRT")
+
+model.data <- full.numeric[model.var]
+
+model.data <- model.data[complete.cases(model.data),]
+
 ```
 
 ## Descriptive Statistics
+```{r echo = FALSE, warning = FALSE, results = asis}
+summary(model.data)
+```
+
+Our descriptive statistics show that about 68 percent of our sample are recidivists, 37 percent committed a violent offense, 27 percent committed a drug offense, and 20 percent committed a propery crime. The average sentence for inmates is 132 months or 11 years, and roughly 80% of those inmates reside in state prisons.The average number of prior arrests for prisoners in our sample is 5. The most common crime committed is drug trafficking, followed by robbery, drug possession, and assault. 
+
+
+Prisoners are most commonly between 25 and 44 years old, with relatively few prisoners above the age of 55. Prisoners are most commonly highschool educated to some degree. About 71 percent of prisoners have children. 38 percent of our sample is black, about 19 percent is hispanic, and about .9% is asian. The remaining 42 percent is categorized as white or other race. Roughly 22 percent of our sample is female. 
+
+
+About 19 percent of our sample reported ever being physically abused, and 12 percent reported ever being sexually abused. About 17.5 percent of prisoners have at least one parent who has been incarcerated (this is equivalent to the father incarcerated variable suggesting this is commonly the father who is incarcerated and not the mother), and 38 percent have family members who have been incarcerated. Drug use is common among prisoners, with 73 percent having regularly used any drug, and 34 percent of prisoners using drugs at the time of arrest. The most common drug used at the time of arrest was marijuana, followed by crack coccaine, meth, and heroin. 61.5 percent of our sample has been in a drug treatment program at least once, with 17.35 classifying themselves as a drug abuser. 
 
 # Methodology
 To predict recidivism, we compare binomial GLM, KNN, decision tree, and random forest using mean-F1 as our measure of accuracy. Our GLM approach  partitions the data as a 70/15/15 train/validate/test while the rest of our methods use k-folds cross validation (k=5) as an alternative to the 70/15/15 partition. 
@@ -289,19 +311,8 @@ Due to the fact that this data comes from only a single year survey, it is not p
 ## GLM
 
 ```{r echo = FALSE, warning = FALSE}
-install.packages("mfx") 
+#install.packages("mfx") #uncomment if install is needed
 library(mfx) #Package to calculate marginal effects of logit model
-
-#Creating dataframe of just potential model varaibles and then dropping NAs
-model.var <- c("CH_CRIMHIST_COLLAPSED", "OFFENSE_VIOLENT", "OFFENSE_DRUG","OFFENSE_PROPERTY","SES_PHYSABUSED_EVER","CS_SENTENCEMTH", 
-                 "SES_PARENTS_INCARCERATED", "SES_FAMILY_INCARCERATED", "SES_HASCHILDREN", "AGE_CAT", 
-                 "SES_SEXABUSED_EVER", "DRUG_ANYREG", "DRUG_ANYTME", "black.nh", "hispanic", "asian", "state", "EDUCATION","SES_FATHER_INCARCERATED",
-               "DRUG_COCRKTME", "DRUG_HROPTME", "DRUG_METHATME", "LIFE_SENTENCE", "GENDER", "TYPEOFFENSE", "DRUG_MARIJTME",
-               "CH_PRIORARREST_CAT", "SES_LIVE_CHILD_ARREST", "DRUG_ABUSE_ONLY", "DRUG_TRT")
-
-model.data <- full.numeric[model.var]
-
-model.data <- model.data[complete.cases(model.data),]
 
 ###Setting up Train/Test/Validate###
 set.seed(42)
@@ -362,7 +373,7 @@ train.real[train.real == 0]  <- "First Timer"
 trainf1.5 <- meanf1(train.real, train.recid) #.801
 
 #Checking confusion matrix#
-table(trainset$CH_CRIMHIST_COLLAPSED, train.recid) #High sensitivity, but low specificity. Probably not what we want. Adjusting cutoff
+#table(trainset$CH_CRIMHIST_COLLAPSED, train.recid) #High sensitivity, but low specificity. Probably not what we want. Adjusting cutoff
 
 #
 val.recid <- predict.glm.val > 0.5
@@ -383,7 +394,7 @@ val.real[val.real == 0] <- "First Timer"
 valf1.5 <- meanf1(val.real, val.recid) # ~.794
 
 #Checking confusion matrix#
-table(val.recid, val.real) #High sensitivity, but low specificity. Probably not what we want. Adjusting cutoff
+#table(val.recid, val.real) #High sensitivity, but low specificity. Probably not what we want. Adjusting cutoff
 
 #Applying labels to our original set
 test.real <- testset$CH_CRIMHIST_COLLAPSED
@@ -401,7 +412,7 @@ train.recid[train.recid == FALSE] <- "First Timer"
 # Mean F1
 trainf1.6 <- meanf1(train.real, train.recid) #.796
 #Checking confusion matrix#
-table(train.real, train.recid) #Pretty close to a good balance
+#table(train.real, train.recid) #Pretty close to a good balance
 
 #Applying predicted labels to validation set
 val.recid <- predict.glm.val > 0.60
@@ -412,7 +423,7 @@ val.recid[val.recid == FALSE] <- "First Timer"
 valf1.6 <- meanf1(val.real, val.recid) #.794
 
 #Checking confusion matrix#
-table(val.real, val.recid) #Still close to a good balance
+#table(val.real, val.recid) #Still close to a good balance
 
 #Using test set for .6 cutoff
 test.recid <- predict.glm.test > 0.6
@@ -424,7 +435,7 @@ testf1.6 <- meanf1(test.real, test.recid) #.794
 
 ```
 
-```{r echo = TRUE, warning = False}
+```{r echo = TRUE, warning = FALSE, results = asis}
 library(knitr)
 
 #Creating dataframe of Mean-F1s for the .5 and .6 cutoffs
