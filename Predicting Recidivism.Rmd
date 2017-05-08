@@ -301,15 +301,150 @@ stargazer(model.data, type = "text", title="Descriptive statistics", digits=2, h
 ```{r echo = TRUE, fig.align="center"}
 factorvar <- data.frame(model.data$EDUCATION, model.data$AGE_CAT, model.data$TYPEOFFENSE)
 summary(factorvar)
+``` 
+
+
+```{r}
+#Manipulating data to prepare for visulizations
+load("~/Desktop/clean.data.RData") #Refer to the cleaning script. 
+
+graphs <- data.frame(full.numeric$ID, full.numeric$CH_CRIMHIST_COLLAPSED, full.numeric$OFFENSE_VIOLENT, 
+            full.numeric$OFFENSE_DRUG, full.numeric$SES_PHYSABUSED_EVER, full.numeric$CS_SENTENCEMTH, 
+            full.numeric$SES_PARENTS_INCARCERATED, full.numeric$SES_FAMILY_INCARCERATED, full.numeric$SES_HASCHILDREN,
+            full.numeric$AGE_CAT, full.numeric$SES_SEXABUSED_EVER, full.numeric$DRUG_ANYREG, full.numeric$DRUG_ANYTME,
+            full.numeric$black.nh, full.numeric$hispanic, full.numeric$asian, full.numeric$state)
+graphs$Education <- full.numeric$EDUCATION
+graphs$Gender <- full.numeric$GENDER
+
+colnames(graphs) <- gsub("full.numeric.", "", colnames(graphs))
 ```
 
-Our descriptive statistics show that about 68 percent of our sample are recidivists, 37 percent committed a violent offense, 27 percent committed a drug offense, and 20 percent committed a propery crime. The average sentence for inmates is 132 months or 11 years, and roughly 80% of those inmates reside in state prisons.The average number of prior arrests for prisoners in our sample is 5. The most common crime committed is drug trafficking, followed by robbery, drug possession, and assault. 
+```{r}
+library(plotly)
+library(ggplot2)
+
+#Graph characteristics of the population
+
+#Age
+ggplot(graphs) + geom_bar(aes(x = graphs$AGE_CAT), color = "navy", fill = "navy")+
+      xlab("Age") + ylab("Number of Prisoners") + ggtitle("Age Distribution")
+
+#Race
+graphs$RACE <- full.numeric$RACE
+ggplot(graphs) + geom_bar(aes(x = graphs$RACE), color = "navy", fill = "navy")+
+      xlab("Race") + ylab("Number of Prisoners") + ggtitle("Distribution of Race") + 
+      scale_x_discrete(labels=c("White", "Black", "Hispanic", "Indian", "Asian", "Multiple", "Missing"))
+
+#Education
+graphs$Education <- as.integer(graphs$Education)
+    ggplot(graphs) + geom_bar(aes(x = graphs$Education), color = "navy", fill = "navy")+
+    xlab("Education") + ylab("Number of Prisoners") + ggtitle("Education")
+```
+
+```{r}
+#Length of Sentence
+ggplot(graphs) + geom_density(aes(x = graphs$CS_SENTENCEMTH), color = "navy", fill = "navy")+
+  xlab("Sentence in Number of Months") + ylab("Number of Prisoners") + ggtitle("Length of Sentence") +
+  coord_cartesian(xlim=c(0, 2000))
+
+```
+```{r}
+#Sexual and Physical Abuse
+p <- plot_ly(x = graphs$SES_SEXABUSED_EVER, type = "histogram", name = 'Sexual Abuse') %>%
+  add_histogram(x = graphs$SES_PHYSABUSED_EVER, name = 'Physical Abuse')%>%
+  layout(title = "Sexual and Physical Abuse", 
+         xaxis = list(title = "Type of Abuse"), 
+                      yaxis = list(title = "Number of Prisoners"))
+p
+```
+
+```{r}
+
+#Prisoners with Minor Children
+graphs$SES_NUMOFMINOR_CHILDREN <- full.numeric$SES_NUMOFMINOR_CHILDREN
+graphs$SES_NUMOFMINOR_CHILDREN <- as.factor(graphs$SES_NUMOFMINOR_CHILDREN)
+graphs$SES_NUMOFMINOR_CHILDREN <- as.integer(graphs$SES_NUMOFMINOR_CHILDREN)
+graphs$SES_NUMOFMINOR_CHILDREN <- as.character(graphs$SES_NUMOFMINOR_CHILDREN)
+
+ggplot(graphs) + geom_bar(aes(x = graphs$SES_NUMOFMINOR_CHILDREN), color = "navy", fill = "navy")+
+  xlab("Number of Minor Children") + ylab("Number of Prisoners") + ggtitle("Prisoners with Minor Children")+
+  scale_x_discrete(labels=c("0", "1", "2", "3", "4", "5", "6"))
+
+```
+
+```{r}
+#Length of Sentence and Recidivism
+ggplot(graphs,aes(x=CS_SENTENCEMTH,y=CH_CRIMHIST_COLLAPSED)) +
+  xlab("Length of Sentence") +
+  ylab("Recidivism") +
+  geom_point(alpha = 0.1, colour="navy",size=1) +
+  geom_smooth() + xlab("Length of Sentence") +
+  ylab("Recidivism") +
+  ggtitle("Length of Sentence and Recidivism")
+
+#Length of Sentence and Violent Offences
+ggplot(graphs,aes(x=CS_SENTENCEMTH,y=OFFENSE_VIOLENT)) +
+  xlab("Length of Sentence") +
+  ylab("Violent Crimes") +
+  geom_point(alpha = 0.1, colour="navy",size=1) +
+  geom_smooth() + xlab("Length of Sentence") +
+  ylab("Violent Crimes") +
+  ggtitle("Length of Sentence and Violent Offences")
+
+#Length of Sentence and Drug Offences
+ggplot(graphs,aes(x=CS_SENTENCEMTH,y=OFFENSE_DRUG)) +
+  xlab("Length of Sentence") +
+  ylab("Drug Crimes") +
+  geom_point(alpha = 0.1, colour="navy",size=1) +
+  geom_smooth() + xlab("Length of Sentence") +
+  ylab("Drug Crimes") +
+  ggtitle("Length of Sentence and Drug Offences")
+```
+
+```{r}
+#Recidivism and Race
+
+graphs$recidivism <- as.character(graphs$CH_CRIMHIST_COLLAPSED)
+graphs$recidivism[graphs$recidivism == 0] <- NA
+graphs$recidivism <- as.numeric(graphs$recidivism)
+graphs$RACE <- as.numeric(graphs$RACE)
+graphs$rac.rec <- graphs$RACE*graphs$recidivism
+graphs$rac.rec <- as.factor(graphs$rac.rec)
+
+rac.rec1 <- as.data.frame(na.omit(graphs$rac.rec))
+
+ggplot(rac.rec1) + geom_bar(aes(x = rac.rec1$`na.omit(graphs$rac.rec)`), color = "navy", fill = "navy")+ xlab("Race") + ylab("Number of Recidivist Prisoners") + ggtitle("Race and Recidivism") + 
+      scale_x_discrete(labels=c("White", "Black", "Hispanic", "Indian", "Asian", "Multiple", "Missing"))
+
+```
+
+```{r}
+#Recidivism and Type of Crimes
+graphs$OFFENSE_DRUG <- as.numeric(graphs$OFFENSE_DRUG)
+graphs$Drug.rec <- graphs$OFFENSE_DRUG*graphs$recidivism
+graphs$Drug.rec <- as.factor(graphs$Drug.rec)
+
+graphs$OFFENSE_VIOLENT <- as.numeric(graphs$OFFENSE_VIOLENT)
+graphs$Violent.rec <- graphs$OFFENSE_VIOLENT*graphs$recidivism
+graphs$Violent.rec <- as.factor(graphs$Violent.rec)
+
+
+plot_ly(x = graphs$Drug.rec, type = "histogram", name = 'Drug Crimes') %>%
+  add_histogram(x = graphs$Violent.rec, name = 'ViolentCrimes')%>%
+  layout(title = "Recidivism and Type of Crimes", 
+         xaxis = list(title = "Recidivism"), 
+                      yaxis = list(title = "Number of Prisoners"))
+
+```
+
+Our descriptive statistics show that about 68 percent of our sample are recidivists, 37 percent committed a violent offense, 27 percent committed a drug offense, and 20 percent committed a propery crime. The average sentence for inmates is 132 months or 11 years, and roughly 80% of those inmates reside in state prisons. The average number of prior arrests for prisoners in our sample is 5. The most common crime committed is drug trafficking, followed by robbery, drug possession, and assault. 
 
 
 Prisoners are most commonly between 25 and 44 years old, with relatively few prisoners above the age of 55. Prisoners are most commonly highschool educated to some degree. About 71 percent of prisoners have children. 38 percent of our sample is black, about 19 percent is hispanic, and about 1% is asian. The remaining 42 percent is categorized as white or other race. Roughly 22 percent of our sample is female. 
 
+About 19 percent of our sample reported ever being physically abused, and 12 percent reported ever being sexually abused. About 17.5 percent of prisoners have at least one parent who has been incarcerated (this is equivalent to the father incarcerated variable suggesting this is commonly the father who is incarcerated and not the mother), and 38 percent have family members who have been incarcerated. Drug use is common among prisoners, with 73 percent having regularly used any drug, and 34 percent of prisoners using drugs at the time of arrest. The most common drug used at the time of arrest was marijuana, followed by crack coccaine, meth, and heroin. 61.5 percent of our sample has been in a drug treatment program at least once, with 17 percent classifying themselves as a drug abuser. Furthermore, length of sentence tends to be negatively correlated with drug crimes while violent crimes are positively correlated with length of sentence. Recidivism tends to decrease with increasing length of sentences before increasing again, suggesting that multiple smaller punishments lead to larger punishments and recidivists may serve longer sentences. 
 
-About 19 percent of our sample reported ever being physically abused, and 12 percent reported ever being sexually abused. About 17.5 percent of prisoners have at least one parent who has been incarcerated (this is equivalent to the father incarcerated variable suggesting this is commonly the father who is incarcerated and not the mother), and 38 percent have family members who have been incarcerated. Drug use is common among prisoners, with 73 percent having regularly used any drug, and 34 percent of prisoners using drugs at the time of arrest. The most common drug used at the time of arrest was marijuana, followed by crack coccaine, meth, and heroin. 61.5 percent of our sample has been in a drug treatment program at least once, with 17 percent classifying themselves as a drug abuser. 
+
 
 # Methodology
 To predict recidivism, we compare binomial GLM, KNN, decision tree, and random forest using mean-F1 as our measure of accuracy. Our GLM approach  partitions the data as a 70/15/15 train/validate/test while the rest of our methods use k-folds cross validation (k=5) as an alternative to the 70/15/15 partition. 
@@ -628,7 +763,7 @@ error.val <- c()
 
 # rerun Model on full dataset
 pred.full.opt <- knn(full.opt[,!names(full.opt) %in% y], full.opt[,!names(full.opt) %in% y], cl=full.opt$CH_CRIMHIST_COLLAPSED, k=3)
-model.errors.knn <- c(model.errors.knn, meanf1(full.opt$CH_CRIMHIST_COLLAPSED, pred.full.opt))
+meanf1(full.opt$CH_CRIMHIST_COLLAPSED, pred.full.opt)
 
 # confusion matrix
 c.matrix.knn <- table(full.opt$CH_CRIMHIST_COLLAPSED, pred.full.opt)
@@ -654,6 +789,8 @@ roc.knn$ROC <- ifelse(roc.knn$true == 1 & roc.knn$predicted == 1, "TP",
                 ifelse(roc.knn$true == 0 & roc.knn$predicted == 1, "FP",
                   ifelse(roc.knn$true == 1 & roc.knn$predicted == 0, "FN",
                     ifelse(roc.knn$true == 0 & roc.knn$predicted == 0, "TN", NA ))))
+
+ggplot(roc.knn, aes(x=ROC, colour = ROC, fill=ROC)) + geom_histogram(stat="count") + labs(title="KNN Predictions")
 ```
 
 
@@ -661,8 +798,6 @@ roc.knn$ROC <- ifelse(roc.knn$true == 1 & roc.knn$predicted == 1, "TP",
 ## Decision Tree
 
 ```{r}
-library(rpart) # for decision trees
-
 ## Model B.d) Decision Tree with variables from best GLM result and DT.opt
 
 #Run kfolds
@@ -711,7 +846,7 @@ dt.full <- rpart(CH_CRIMHIST_COLLAPSED ~ OFFENSE_VIOLENT + OFFENSE_DRUG +OFFENSE
                    TYPEOFFENSE + DRUG_MARIJTME + CH_PRIORARREST_CAT + SES_LIVE_CHILD_ARREST + DRUG_ABUSE_ONLY + DRUG_TRT,
                    method = "class", data = full.opt, cp=0.003)
 pred.full.dt <- predict(dt.full, full.opt, type = "class")
-model.errors.dt <- c(model.errors.dt, meanf1(full.opt$CH_CRIMHIST_COLLAPSED, pred.full.dt))
+meanf1(full.opt$CH_CRIMHIST_COLLAPSED, pred.full.dt)
 
 # confusion matrix
 c.mat.dt <- table(full.opt$CH_CRIMHIST_COLLAPSED, pred.full.dt)
@@ -737,14 +872,15 @@ roc.dt$ROC <- ifelse(roc.dt$true == 1 & roc.dt$predicted == 1, "TP",
                       ifelse(roc.dt$true == 0 & roc.dt$predicted == 1, "FP",
                              ifelse(roc.dt$true == 1 & roc.dt$predicted == 0, "FN",
                                     ifelse(roc.dt$true == 0 & roc.dt$predicted == 0, "TN", NA ))))
+
+ggplot(roc.dt, aes(x=ROC, colour = ROC, fill=ROC)) + geom_histogram(stat="count")  + labs(title="Decision Tree Predictions")
+
 ```
 
 
 ## Random Forest
 
 ```{r}
-library(randomForest) # for random forest predicitions
-
 ## Model C.d) Fine Tuning of RF with k=4 and optimal variables from GLM Prediction
 
 #Run kfolds
@@ -792,7 +928,7 @@ rf.full.opt.opt <- randomForest(as.factor(CH_CRIMHIST_COLLAPSED) ~ OFFENSE_VIOLE
                                   SES_LIVE_CHILD_ARREST + DRUG_ABUSE_ONLY + DRUG_TRT, 
                                   data = full.opt, mtry=4)
 pred.full.rf <- predict(rf.full.opt.opt, full.opt, type = "class")
-model.errors.rf <- c(model.errors.rf, meanf1(full.opt$CH_CRIMHIST_COLLAPSED, pred.full.rf))
+meanf1(full.opt$CH_CRIMHIST_COLLAPSED, pred.full.rf)
 
 # confusion matrix
 c.mat.rf <- table(full.opt$CH_CRIMHIST_COLLAPSED, pred.full.rf) # sensitivity and specificity pretty much like RF default
@@ -818,38 +954,8 @@ roc.rf$ROC <- ifelse(roc.rf$true == 1 & roc.rf$predicted == 1, "TP",
                      ifelse(roc.rf$true == 0 & roc.rf$predicted == 1, "FP",
                             ifelse(roc.rf$true == 1 & roc.rf$predicted == 0, "FN",
                                    ifelse(roc.rf$true == 0 & roc.rf$predicted == 0, "TN", NA ))))
-```
 
-
-
-```{r}
-## Visualize Model Comparisons
-
-library(knitr)
-
-model.errors <- data.frame("Model Mean F1" = character(3), "train" = numeric(3), "test" = numeric(3), 
-                           "validate" = numeric(3), "full" = numeric(3))
-
-model.errors[,1] <- c("KNN", "Decision Tree", "Random Forest")
-
-model.errors[1,2:5] <- model.errors.knn
-model.errors[2,2:5] <- model.errors.dt
-model.errors[3,2:5] <- model.errors.rf
-
-kable(model.errors, format = "markdown")
-
-
-model.accuracy <- data.frame("Model Accuracy Measure" = character(4), "KNN" = numeric(4),
-                             "Decision Tree" = numeric(4), "Random Forest" = numeric(4))
-
-model.accuracy[,1] <- c("accuracy", "TPR", "TNR", "PPV")
-
-model.accuracy[,2] <- c(accuracy.knn, tpr.knn, tnr.knn, ppv.knn)
-model.accuracy[,3] <- c(accuracy.dt, tpr.dt, tnr.dt, ppv.dt)
-model.accuracy[,4] <- c(accuracy.rf, tpr.rf, tnr.rf, ppv.rf)
-
-kable(model.accuracy, format = "markdown")
-
+ggplot(roc.rf, aes(x=ROC, colour = ROC, fill=ROC)) + geom_histogram(stat="count") + labs(title="Random Forest Predictions")
 
 ```
 
