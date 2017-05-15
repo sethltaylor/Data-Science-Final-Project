@@ -481,7 +481,7 @@ kable(glm.acc.meas, format = 'markdown')
 ```
 The mean F1 for our test set at the 0.6 cutoff is shown to be .794, with a sensitivity of .828 and a specificity of .702. However, accuracy for this model is very low at .16. 
 
-# GLM: Marginal Effects
+### GLM: Marginal Effects
 
 We also run our GLM model on the full dataset and calculate the marginal effects at means for each variable. 
 
